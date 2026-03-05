@@ -11,6 +11,9 @@ WireGuard-Server nativ                                        wireguard-ui + ddn
 
 ---
 
+> **Befehls-Referenz:** Alle Aktionen auch direkt ohne Menü aufrufbar →
+> [Befehls-Referenz.md](Befehls-Referenz.md)
+
 ## Überblick: Was wird wo eingerichtet?
 
 | Standort       | Gerät          | Was                                          |
