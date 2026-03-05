@@ -76,6 +76,27 @@ container_status() {
     fi
 }
 
+ddns_status() {
+    if ! command -v docker &>/dev/null; then
+        echo "DDNS: ?"
+        return
+    fi
+    local STATE
+    STATE=$(docker inspect -f '{{.State.Running}}' ddns-go 2>/dev/null || echo "false")
+    if [[ "$STATE" != "true" ]]; then
+        echo "DDNS: GESTOPPT ✘"
+        return
+    fi
+    # Letzte Log-Zeilen auf Fehler prüfen
+    local LAST
+    LAST=$(docker logs ddns-go --tail 5 2>&1 | tr '[:upper:]' '[:lower:]')
+    if echo "$LAST" | grep -q "error\|fail\|err"; then
+        echo "DDNS: FEHLER ⚠"
+    else
+        echo "DDNS: OK ✔"
+    fi
+}
+
 raspi_ip() {
     hostname -I 2>/dev/null | awk '{print $1}' || echo "?.?.?.?"
 }
@@ -87,10 +108,11 @@ raspi_ip() {
 # ─── Hauptmenü ────────────────────────────────────────────────────────────────
 main_menu_whiptail() {
     while true; do
-        local VPN_ST CONT_ST STATUS_LINE
+        local VPN_ST CONT_ST DDNS_ST STATUS_LINE
         VPN_ST=$(vpn_status)
         CONT_ST=$(container_status)
-        STATUS_LINE="  ${VPN_ST}    |    ${CONT_ST}"   
+        DDNS_ST=$(ddns_status)
+        STATUS_LINE="  ${VPN_ST}  |  ${CONT_ST}  |  ${DDNS_ST}"
 
         local CHOICE
         CHOICE=$(whiptail \
@@ -442,7 +464,7 @@ banner_text() {
     echo "  ╚═╝     ╚═╝        ╚═══╝  ╚═╝     ╚═╝  ╚═══╝"
     echo -e "${NC}"
     echo -e "  ${BOLD}Site-to-Site WireGuard — Zentrales Menü${NC}"
-    echo -e "  ${DIM}$(vpn_status)  |  $(container_status)  |  $(hostname)${NC}"
+    echo -e "  ${DIM}$(vpn_status)  |  $(container_status)  |  $(ddns_status)  |  $(hostname)${NC}"
     blank
     divider_text
 }
