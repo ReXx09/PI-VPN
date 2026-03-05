@@ -1,0 +1,9 @@
+# Shell-Skripte immer mit Unix-Zeilenenden (LF) speichern
+*.sh text eol=lf
+
+# Markdown und YAML — plattformabhängig
+*.md  text eol=lf
+*.yml text eol=lf
+*.env text eol=lf
+*.conf text eol=lf
+*.example text eol=lf
