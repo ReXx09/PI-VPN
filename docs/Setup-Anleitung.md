@@ -9,24 +9,42 @@
 
 ---
 
-## Phase 1 — Docker auf beiden Raspberry Pi installieren
+## Phase 1 — Docker auf dem Raspberry Pi installieren
 
-Auf **beiden Raspis** ausführen:
+Auf dem Nebenwohnsitz-Raspi ausführen:
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Einmalig prüfen
-docker --version
-docker compose version
 ```
 
 Oder mit dem mitgelieferten Skript:
 ```bash
 sudo bash /opt/pi-vpn/scripts/setup/install-docker.sh
 ```
+
+---
+
+## ⚡ Schnellstart: Interaktiver Setup-Wizard
+
+Der Wizard führt dich durch **alle Schritte automatisch** — empfohlener Einstieg:
+
+```bash
+cd /opt/pi-vpn
+sudo bash scripts/setup/setup-wizard.sh
+```
+
+Der Wizard erledigt:
+- Systemcheck (Kernel, Docker, WireGuard-Modul)
+- Docker installieren (falls noch nicht vorhanden)
+- IP-Forwarding + Kernel-Tweaks setzen
+- Alle Konfigurationswerte interaktiv abfragen
+- `.env` automatisch generieren
+- Container starten
+- Nächste Schritte für die wireguard-ui WebUI erklären
+
+> Die manuelle Schritt-für-Schritt-Anleitung folgt unterhalb für Referenz.
 
 ---
 

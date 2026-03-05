@@ -101,30 +101,23 @@ PI-VPN/
 Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
 - WireGuard-Plugin aktivieren, Schlüsselpaar generieren
 - Peer `nebenwohnsitz` anlegen
-- Konfig für den Raspi exportieren
 - Dynamisches DNS einrichten (AAAA-Record)
 
-### 2. Raspberry Pi (Nebenwohnsitz) — Docker installieren
+### 2. Raspberry Pi (Nebenwohnsitz) — Interaktiver Installer
+
 ```bash
+# Repo klonen
 cd /opt
 sudo git clone https://github.com/ReXx09/PI-VPN.git pi-vpn
+
+# Wizard starten — führt durch alles
 cd pi-vpn
-sudo bash scripts/setup/install-docker.sh
-sudo bash scripts/setup/init.sh nebenwohnsitz
+sudo bash scripts/setup/setup-wizard.sh
 ```
 
-### 3. WireGuard-Konfig einspielen + starten
-```bash
-# Exportierte wg0.conf von OPNsense ablegen:
-cp /pfad/zur/wg0.conf /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
-
-cd /opt/pi-vpn/docker/nebenwohnsitz
-sudo docker compose up -d
-
-# Status prüfen:
-sudo docker exec wireguard-client wg show
-# DDNS-WebUI: http://<raspi-ip>:9876
-```
+Der Wizard installiert Docker, fragt alle Einstellungen ab, generiert die `.env`
+und startet die Container. Am Ende bekommst du genaue Anweisungen für die
+wireguard-ui WebUI (welche Werte wo einzutragen sind).
 
 ---
 
