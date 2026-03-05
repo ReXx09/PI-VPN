@@ -372,11 +372,36 @@ Optional — nützlich wenn OPNsense Firewall-Regeln auf die Client-IPv6 setzen 
 
 1. Provider wählen: **Cloudflare**
 2. API-Token: (eigener Cloudflare-Token mit DNS:Edit-Berechtigung)
-3. Domain: `vpn-neben.deine-domain.de`
-4. Record-Typ: **AAAA** (IPv6)
-5. IPv6-Quelle: **Netzwerk-Interface → eth0**
-6. Intervall: `5 Minuten`
-7. **Speichern** → **„Einmalig aktualisieren"**
+3. **Speichern**
+
+**IPv4-Sektion:**
+
+| Feld    | Wert                |
+|---------|---------------------|
+| Enabled | ☐ **deaktivieren** |
+
+> **Warum deaktivieren?** Vodafone Kabel nutzt DS-Lite — du hast kein öffentliches IPv4.
+> ddns-go würde sonst eine private CGNAT-Adresse in den DNS eintragen, was nicht funktioniert.
+
+**IPv6-Sektion:**
+
+| Feld           | Wert                             |
+|----------------|----------------------------------|
+| Enabled        | ✅ aktivieren                    |
+| Get IP method  | **By network card → eth0**       |
+| Domains        | `vpn-neben.deine-domain.de`      |
+
+> **Warum "By network card" statt "By API"?**
+> Linux vergibt sich durch IPv6 Privacy Extensions **mehrere Adressen gleichzeitig**:
+> eine stabile (MAC-basiert, ändert sich nie) und eine temporäre (zufällig, wechselt regelmäßig).
+> Externe Dienste (By API) sehen immer die **temporäre** Adresse, da das OS diese für
+> ausgehende Verbindungen bevorzugt — dein DNS-Eintrag würde auf eine kurzlebige Adresse zeigen.
+> "By network card" liest direkt die **stabile** Adresse von `eth0`, unabhängig davon,
+> welche Adresse für ausgehende Verbindungen verwendet wird.
+
+4. **Save** klicken
+5. **„Einmalig aktualisieren"** → der AAAA-Record wird sofort gesetzt
+6. Intervall: `5 Minuten` (Standard — passt)
 
 ---
 
