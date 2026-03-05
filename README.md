@@ -4,6 +4,73 @@ Raspberry Pi basiertes Site-to-Site VPN zwischen zwei Standorten mit **CGNAT/DS-
 
 ---
 
+## Was ist PI-VPN?
+
+PI-VPN ist ein vollständig automatisiertes Setup-System für ein **Site-to-Site VPN zwischen zwei Wohnstandorten** —
+speziell entwickelt für Anschlüsse **ohne öffentliche IPv4-Adresse** (CGNAT / DS-Lite).
+
+### Das Problem
+
+Viele moderne Internetzugänge vergeben keine öffentliche IPv4-Adresse mehr:
+
+- **Starlink** setzt CGNAT ein → kein erreichbares IPv4 von außen
+- **Vodafone Kabel** nutzt DS-Lite → IPv4 liegt hinter einem Carrier-NAT
+
+Klassische VPN-Setups, die eine feste öffentliche IPv4 voraussetzen, funktionieren hier **nicht**.
+
+### Die Lösung
+
+Beide Standorte haben **nativ IPv6** → PI-VPN baut den gesamten WireGuard-Tunnel
+ausschließlich über IPv6 auf. DDNS sorgt dafür, dass sich die Gegenstelle auch bei
+wechselnder IPv6-Adresse (Starlink vergbt neue Präfixe) immer findet.
+
+### Was dieses Projekt liefert
+
+| Komponente                  | Beschreibung                                                                 |
+|-----------------------------|------------------------------------------------------------------------------|
+| **menu.sh**                 | Grafische TUI-Oberfläche (whiptail) als zentraler Einstiegspunkt            |
+| **setup-wizard.sh**         | Interaktiver 7-Stufen-Installer: Docker, WireGuard, .env, Container-Start   |
+| **install-docker.sh**       | Standalone-Skript zum Installieren von Docker CE auf dem Raspberry Pi        |
+| **init.sh**                 | Legt Verzeichnisstruktur und Berechtigungen an                               |
+| **status.sh**               | Vollständiger VPN-Status: Tunnel, Container, DDNS, IP-Forwarding            |
+| **backup.sh**               | Backup aller Konfigurationsdateien (Keys, Peers, .env, wg0.conf)            |
+| **reset.sh**                | 8-stufiger interaktiver Reset für Neu-Tests und Deinstallation               |
+| **docker-compose.yml**      | Fertig konfigurierter Stack: wireguard-ui + ddns-go                          |
+| **Dokumentation (docs/)**   | Schritt-für-Schritt-Anleitungen für alle Komponenten                         |
+
+### Architektur im Überblick
+
+```
+Hauptwohnsitz                          Nebenwohnsitz
+────────────────────────────           ─────────────────────────────────────
+OPNsense (WireGuard-Server)            Raspberry Pi (WireGuard-Client)
+  • os-wireguard Plugin                  • wireguard-ui (Docker, Port 5000)
+  • DDNS → Cloudflare AAAA               • ddns-go     (Docker, Port 9876)
+  • VPN-IP: 10.10.0.1                    • VPN-IP: 10.10.0.2
+  • LAN: 192.168.10.0/24                 • LAN: 192.168.20.0/24
+
+         ◄══ WireGuard Tunnel über IPv6 (MTU 1280, Keepalive 25s) ══►
+```
+
+### Wofür eignet sich PI-VPN?
+
+- **Fernzugriff auf das Heimnetz** — auf NAS, Drucker, Smarthome-Geräte am Hauptwohnsitz zugreifen
+- **Gemeinsames Netzwerk** — Geräte an beiden Standorten kommunizieren direkt miteinander
+- **Streaming via Starlink** — Full-Tunnel-Modus leitet den gesamten Datenverkehr am Nebenwohnsitz durch den Heimanschluss
+- **Sicherer Kanal** — verschlüsseltes WireGuard-Protokoll, keine dritten Parteien (kein Cloud-VPN)
+
+### Voraussetzungen auf einen Blick
+
+| Was                     | Anforderung                                                   |
+|-------------------------|---------------------------------------------------------------|
+| Hauptwohnsitz           | OPNsense ≥ 21.7 mit `os-wireguard`-Plugin                    |
+| Nebenwohnsitz           | Raspberry Pi 4 oder 5, Raspberry Pi OS Bookworm 64-bit        |
+| Internetzugang          | IPv6 an beiden Standorten (CGNAT/DS-Lite kein Problem)        |
+| DDNS                    | Cloudflare (empfohlen) oder anderer Anbieter mit AAAA-Support |
+| GitHub-Zugang           | Fine-grained Token mit Read-Zugriff auf dieses Repo           |
+
+---
+
 ## Netzwerkübersicht
 
 ```
@@ -81,18 +148,20 @@ PI-VPN/
 │   └── clients/
 │       └── nebenwohnsitz.conf.example  # Raspi Client-Konfig
 ├── docs/
+│   ├── Befehls-Referenz.md         # Alle Befehle direkt ohne Menü
 │   ├── Netzwerkuebersicht.md       # Detaillierte Netzwerkplanung
 │   ├── Setup-Anleitung.md          # Schritt-für-Schritt Guide
 │   ├── OPNsense-WireGuard.md       # WireGuard-Plugin in OPNsense
 │   └── Fritzbox-IPv6-Setup.md      # IPv6-Freigabe Nebenwohnsitz
 └── scripts/
     ├── setup/
+    │   ├── setup-wizard.sh         # Interaktiver 7-Stufen-Installer
     │   ├── install-docker.sh       # Docker auf Raspberry Pi installieren
     │   └── init.sh                 # Erstkonfiguration
     └── manage/
         ├── status.sh               # VPN-Status anzeigen
         ├── backup.sh               # Konfig-Backup
-        └── reset.sh                # Alles entfernen / Neu-Test
+        └── reset.sh                # Interaktiver Reset / Deinstallation
 ```
 
 ---
@@ -121,13 +190,13 @@ sudo bash menu.sh
 Das **zentrale Menü** (`menu.sh`) bietet eine grafische Terminal-Oberfläche (TUI)
 mit allen Funktionen auf einen Blick:
 
-| Menüpunkt             | Funktion                                              |
-|-----------------------|-------------------------------------------------------|
-| ⚙ Setup & Installation | Wizard, Docker installieren, Verzeichnisse anlegen   |
-| 📊 Status & Monitoring  | VPN-Status, Container-Logs, wg show, Routing         |
-| 🔄 Container-Verwaltung | Start / Stop / Restart, Live-Logs, Backup            |
-| 📝 Konfiguration        | .env bearbeiten, git pull, Systeminformationen       |
-| 🗑 Reset & Deinstallation | Interaktiver Komplett-Reset für Neu-Tests          |
+| Menüpunkt               | Funktion                                                      |
+|-------------------------|---------------------------------------------------------------|
+| [SETUP]  Setup          | Wizard, Docker installieren, Verzeichnisse anlegen            |
+| [STATUS] Monitoring     | VPN-Status, Container-Logs, wg show, Routing                  |
+| [CONTAINER] Verwaltung  | Start / Stop / Restart, Live-Logs, Backup                     |
+| [CONFIG] Konfiguration  | .env bearbeiten, git pull, Systeminformationen                |
+| [RESET]  Deinstallation | Interaktiver Komplett-Reset für Neu-Tests                     |
 
 > Alternativ direkt den Setup-Wizard starten:
 > `sudo bash /opt/pi-vpn/scripts/setup/setup-wizard.sh`
