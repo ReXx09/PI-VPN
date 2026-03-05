@@ -90,7 +90,7 @@ main_menu_whiptail() {
         local VPN_ST CONT_ST STATUS_LINE
         VPN_ST=$(vpn_status)
         CONT_ST=$(container_status)
-        STATUS_LINE="  ${VPN_ST}    |    ${CONT_ST}"    |
+        STATUS_LINE="  ${VPN_ST}    |    ${CONT_ST}"   
 
         local CHOICE
         CHOICE=$(whiptail \
