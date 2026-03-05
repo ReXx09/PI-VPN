@@ -2,7 +2,8 @@
 # =============================================================================
 # init.sh — Erstinitialisierung des PI-VPN Projekts
 # Erstellt Verzeichnisstruktur, .env-Dateien und .gitignore
-# Ausführen als: sudo bash scripts/setup/init.sh [hauptwohnsitz|nebenwohnsitz]
+# Ausführen als: sudo bash scripts/setup/init.sh
+# (Alternativ: setup-wizard.sh übernimmt diese Schritte automatisch)
 # =============================================================================
 
 set -euo pipefail
@@ -15,9 +16,11 @@ info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-STANDORT="${1:-}"
-[[ "$STANDORT" == "hauptwohnsitz" || "$STANDORT" == "nebenwohnsitz" ]] \
-    || error "Nutzung: $0 [hauptwohnsitz|nebenwohnsitz]"
+# Nur Nebenwohnsitz — Hauptwohnsitz nutzt OPNsense nativ (kein Docker dort)
+STANDORT="nebenwohnsitz"
+if [[ "${1:-}" == "hauptwohnsitz" ]]; then
+    error "Hauptwohnsitz nutzt OPNsense nativ — kein Docker-Stack nötig."
+fi
 
 DOCKER_DIR="$PROJECT_ROOT/docker/$STANDORT"
 
@@ -25,10 +28,6 @@ DOCKER_DIR="$PROJECT_ROOT/docker/$STANDORT"
 info "Erstelle Datenverzeichnisse für $STANDORT..."
 mkdir -p "$DOCKER_DIR/data/wireguard"
 mkdir -p "$DOCKER_DIR/data/ddns-go"
-
-if [[ "$STANDORT" == "hauptwohnsitz" ]]; then
-    mkdir -p "$DOCKER_DIR/data/db"
-fi
 
 # ─── .env anlegen (falls noch nicht vorhanden) ────────────────────────────────
 ENV_FILE="$DOCKER_DIR/.env"

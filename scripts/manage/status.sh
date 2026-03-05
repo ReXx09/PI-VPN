@@ -56,25 +56,34 @@ ip -6 addr show scope global | grep "inet6" | while read -r line; do
 done || warn "Keine globalen IPv6-Adressen gefunden"
 
 # ─── DDNS-Auflösung ───────────────────────────────────────────────────────────
-section "DDNS-Auflösung"
+section "DDNS-Auflösung (OPNsense-Endpoint)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ENV_FILE="$PROJECT_ROOT/docker/hauptwohnsitz/.env"
 
-if [[ -f "$ENV_FILE" ]]; then
-    ENDPOINT=$(grep "WGUI_ENDPOINT_HOSTNAME" "$ENV_FILE" | cut -d= -f2 | tr -d ' ')
-    if [[ -n "$ENDPOINT" && "$ENDPOINT" != *"DEINE-DOMAIN"* ]]; then
-        RESOLVED=$(dig +short AAAA "$ENDPOINT" 2>/dev/null || nslookup -type=AAAA "$ENDPOINT" 2>/dev/null | grep -oP '2[0-9a-f:]+' | head -1 || echo "")
-        if [[ -n "$RESOLVED" ]]; then
-            ok "DDNS $ENDPOINT → $RESOLVED"
-        else
-            fail "DDNS $ENDPOINT → nicht auflösbar"
-        fi
+# Endpoint direkt aus dem laufenden wg0-Interface auslesen
+if ip link show wg0 &>/dev/null && command -v wg &>/dev/null; then
+    ENDPOINT=$(wg show wg0 endpoints 2>/dev/null | awk '{print $2}' | head -1)
+    if [[ -n "$ENDPOINT" && "$ENDPOINT" != "(none)" ]]; then
+        ok "Aktiver Peer-Endpoint: $ENDPOINT"
     else
-        warn "DDNS-Hostname noch nicht konfiguriert (Platzhalter in .env)"
+        warn "Kein Peer-Endpoint sichtbar (noch kein Handshake oder Tunnel offline)"
     fi
 else
-    warn ".env nicht gefunden — Hauptwohnsitz noch nicht initialisiert"
+    warn "wg0 nicht aktiv — Endpoint nicht ermittelbar"
+fi
+
+# Hostname aus wireguard-ui wg0.conf lesen (Fallback)
+WG_CONF="$PROJECT_ROOT/docker/nebenwohnsitz/data/wireguard/wg0.conf"
+if [[ -f "$WG_CONF" ]]; then
+    DDNS_HOST=$(grep -i "Endpoint" "$WG_CONF" | head -1 | awk -F= '{print $2}' | awk -F: '{print $1}' | tr -d ' ')
+    if [[ -n "$DDNS_HOST" && "$DDNS_HOST" != *"<"* ]]; then
+        RESOLVED=$(dig +short AAAA "$DDNS_HOST" 2>/dev/null || echo "")
+        if [[ -n "$RESOLVED" ]]; then
+            ok "DDNS $DDNS_HOST → $RESOLVED"
+        else
+            fail "DDNS $DDNS_HOST → nicht auflösbar (IPv6-Konnektivität prüfen)"
+        fi
+    fi
 fi
 
 # ─── Konnektivität ────────────────────────────────────────────────────────────

@@ -107,12 +107,11 @@ Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
 ### 2. Raspberry Pi (Nebenwohnsitz) — Interaktiver Installer
 
 ```bash
-# Repo klonen
-cd /opt
-sudo git clone https://github.com/ReXx09/PI-VPN.git pi-vpn
+# Repo klonen (Token aus Schritt B2 der Setup-Anleitung)
+sudo git clone https://<DEIN_TOKEN>@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 
 # Wizard starten — führt durch alles
-cd pi-vpn
+cd /opt/pi-vpn
 sudo bash scripts/setup/setup-wizard.sh
 ```
 
