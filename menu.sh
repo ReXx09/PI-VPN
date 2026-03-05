@@ -105,7 +105,7 @@ ddns_status() {
     if [[ -n "$DOMAIN" ]]; then
         echo "DDNS: $DOMAIN ✔"
     else
-        echo "DDNS: verbunden ✔"
+        echo "DDNS: nicht konfiguriert"
     fi
 }
 
