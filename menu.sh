@@ -118,14 +118,14 @@ main_menu_whiptail() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Zentrales Menue  |  $(hostname)" \
             --menu "${STATUS_LINE}\n\nWähle eine Kategorie:" \
-            22 72 8 \
-            "1" "  [SETUP]      Setup & Installation" \
-            "2" "  [STATUS]     Status & Monitoring" \
-            "3" "  [CONTAINER]  Container-Verwaltung" \
-            "4" "  [CONFIG]     Konfiguration & Updates" \
-            "5" "  [RESET]      Reset & Deinstallation" \
-            "6" "  [WEBUI]      WebUI-Adressen anzeigen" \
-            "0" "  [X]          Beenden" \
+            22 84 8 \
+            "1" "  🔧  Setup & Installation" \
+            "2" "  📊  Status & Monitoring" \
+            "3" "  🐳  Container-Verwaltung" \
+            "4" "  ⚙️  Konfiguration & Updates" \
+            "5" "  🔄  Reset & Deinstallation" \
+            "6" "  🌐  WebUI-Adressen anzeigen" \
+            "0" "  ❌  Beenden" \
             3>&1 1>&2 2>&3) || break
 
         case "$CHOICE" in
@@ -473,12 +473,12 @@ main_menu_text() {
     while true; do
         banner_text
         blank
-        echo -e "  ${BOLD}[1]${NC}  [SETUP]      Setup & Installation"
-        echo -e "  ${BOLD}[2]${NC}  [STATUS]     Status & Monitoring"
-        echo -e "  ${BOLD}[3]${NC}  [CONTAINER]  Container-Verwaltung"
-        echo -e "  ${BOLD}[4]${NC}  [CONFIG]     Konfiguration & Updates"
-        echo -e "  ${BOLD}[5]${NC}  [RESET]      Reset & Deinstallation"
-        echo -e "  ${BOLD}[6]${NC}  [WEBUI]      WebUI-Adressen anzeigen"
+        echo -e "  ${BOLD}[1]${NC}  🔧  Setup & Installation"
+        echo -e "  ${BOLD}[2]${NC}  📊  Status & Monitoring"
+        echo -e "  ${BOLD}[3]${NC}  🐳  Container-Verwaltung"
+        echo -e "  ${BOLD}[4]${NC}  ⚙️  Konfiguration & Updates"
+        echo -e "  ${BOLD}[5]${NC}  🔄  Reset & Deinstallation"
+        echo -e "  ${BOLD}[6]${NC}  🌐  WebUI-Adressen anzeigen"
         blank
         divider_text
         echo -e "  ${BOLD}[0]${NC}  Beenden"
