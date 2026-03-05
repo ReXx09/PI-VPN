@@ -155,6 +155,17 @@ else
     warn "Empfehlung: 'sudo apt install wireguard-dkms' manuell ausführen"
 fi
 
+# Basis-Pakete sicherstellen (git, curl, ca-certificates)
+for PKG in git curl ca-certificates; do
+    if command -v "$PKG" &>/dev/null || dpkg -s "$PKG" &>/dev/null 2>&1; then
+        ok "$PKG ist installiert"
+    else
+        info "$PKG wird installiert…"
+        apt-get update -qq 2>/dev/null || true
+        apt-get install -y -qq "$PKG" 2>/dev/null && ok "$PKG installiert" || warn "$PKG konnte nicht installiert werden"
+    fi
+done
+
 # wireguard-tools prüfen (für wg show auf dem Host)
 if command -v wg &>/dev/null; then
     ok "wireguard-tools sind installiert ($(wg --version))"

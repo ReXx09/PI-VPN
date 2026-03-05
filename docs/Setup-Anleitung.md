@@ -155,6 +155,11 @@ Da das Repository **privat** ist, brauchst du einen Token zum Klonen.
 
 ```bash
 # Auf dem Raspberry Pi (via SSH):
+
+# Schritt 1 — git installieren (auf frischem Raspberry Pi OS nicht vorinstalliert!)
+sudo apt update && sudo apt install -y git
+
+# Schritt 2 — Repo klonen
 # ↓ DEIN_TOKEN durch den kopierten Token ersetzen (z. B. github_pat_11ABCDEF_...)
 sudo git clone https://DEIN_TOKEN@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 ```
