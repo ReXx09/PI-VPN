@@ -70,6 +70,7 @@ Beide Anschlüsse haben **kein öffentlich erreichbares IPv4**, aber **natives I
 ```
 PI-VPN/
 ├── README.md
+├── menu.sh                         # ← Zentrales Menü (TUI) — hier starten!
 ├── docker/
 │   └── nebenwohnsitz/
 │       ├── docker-compose.yml      # Einziger Docker-Stack (Raspi)
@@ -104,20 +105,30 @@ Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
 - Peer `nebenwohnsitz` anlegen
 - Dynamisches DNS einrichten (AAAA-Record)
 
-### 2. Raspberry Pi (Nebenwohnsitz) — Interaktiver Installer
+### 2. Raspberry Pi (Nebenwohnsitz) — Zentrales Menü & Installer
 
 ```bash
 # Repo klonen (Token aus Schritt B2 der Setup-Anleitung)
 sudo git clone https://<DEIN_TOKEN>@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 
-# Wizard starten — führt durch alles
+# Zentrales Menü starten — grafische TUI-Oberfläche für alle Funktionen
 cd /opt/pi-vpn
-sudo bash scripts/setup/setup-wizard.sh
+sudo bash menu.sh
 ```
 
-Der Wizard installiert Docker, fragt alle Einstellungen ab, generiert die `.env`
-und startet die Container. Am Ende bekommst du genaue Anweisungen für die
-wireguard-ui WebUI (welche Werte wo einzutragen sind).
+Das **zentrale Menü** (`menu.sh`) bietet eine grafische Terminal-Oberfläche (TUI)
+mit allen Funktionen auf einen Blick:
+
+| Menüpunkt             | Funktion                                              |
+|-----------------------|-------------------------------------------------------|
+| ⚙ Setup & Installation | Wizard, Docker installieren, Verzeichnisse anlegen   |
+| 📊 Status & Monitoring  | VPN-Status, Container-Logs, wg show, Routing         |
+| 🔄 Container-Verwaltung | Start / Stop / Restart, Live-Logs, Backup            |
+| 📝 Konfiguration        | .env bearbeiten, git pull, Systeminformationen       |
+| 🗑 Reset & Deinstallation | Interaktiver Komplett-Reset für Neu-Tests          |
+
+> Alternativ direkt den Setup-Wizard starten:
+> `sudo bash /opt/pi-vpn/scripts/setup/setup-wizard.sh`
 
 ---
 
