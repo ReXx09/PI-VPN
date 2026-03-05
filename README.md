@@ -108,8 +108,10 @@ Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
 ### 2. Raspberry Pi (Nebenwohnsitz) — Zentrales Menü & Installer
 
 ```bash
-# Repo klonen (Token aus Schritt B2 der Setup-Anleitung)
-sudo git clone https://<DEIN_TOKEN>@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
+# Repo klonen — DEIN_TOKEN durch den GitHub Fine-grained Token ersetzen
+# (Token erstellen: github.com → Settings → Developer settings → Fine-grained tokens)
+# Beispiel-Token-Format: github_pat_11ABCDEF_...
+sudo git clone https://DEIN_TOKEN@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 
 # Zentrales Menü starten — grafische TUI-Oberfläche für alle Funktionen
 cd /opt/pi-vpn

@@ -155,11 +155,16 @@ Da das Repository **privat** ist, brauchst du einen Token zum Klonen.
 
 ```bash
 # Auf dem Raspberry Pi (via SSH):
-sudo git clone https://<DEIN_TOKEN>@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
-
-# Beispiel:
-# sudo git clone https://github_pat_XXXX@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
+# ↓ DEIN_TOKEN durch den kopierten Token ersetzen (z. B. github_pat_11ABCDEF_...)
+sudo git clone https://DEIN_TOKEN@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 ```
+
+> **Beispiel** (echter Token sieht so aus):
+> ```bash
+> sudo git clone https://github_pat_11ABCDEF_xYz0123456789abcdef@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
+> ```
+>
+> **Achtung:** Den Token niemals mit Leerzeichen oder Anführungszeichen eingeben — direkt nahtlos im URL ersetzen.
 
 ### B4 — Setup-Wizard starten
 
