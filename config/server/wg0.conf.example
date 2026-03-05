@@ -1,0 +1,54 @@
+# =============================================================================
+# WireGuard Server-Konfiguration — Hauptwohnsitz
+# Diese Datei wird von wireguard-ui automatisch generiert und verwaltet.
+# Dieses Beispiel dient als Referenz / Dokumentation.
+#
+# Pfad auf dem Raspi: /opt/pi-vpn/docker/hauptwohnsitz/data/wireguard/wg0.conf
+# =============================================================================
+
+[Interface]
+# Privater Schlüssel des Servers (wird von wireguard-ui generiert)
+PrivateKey = <SERVER_PRIVATE_KEY>
+
+# VPN-IP des Servers
+Address = 10.10.0.1/24
+
+# Lauscht auf UDP Port 51820 (IPv4 und IPv6)
+ListenPort = 51820
+
+# MTU: 1280 für Starlink IPv6 (sicherer Wert gegen Fragmentierung)
+MTU = 1280
+
+# iptables-Regeln für Forwarding zwischen wg0 und dem LAN-Interface (z. B. eth0)
+# Passt das Interface (eth0) an dein System an: ip link show
+PostUp   = iptables  -A FORWARD -i wg0 -j ACCEPT; \
+           iptables  -A FORWARD -o wg0 -j ACCEPT; \
+           iptables  -t nat -A POSTROUTING -o eth0 -j MASQUERADE; \
+           ip6tables -A FORWARD -i wg0 -j ACCEPT; \
+           ip6tables -A FORWARD -o wg0 -j ACCEPT; \
+           ip6tables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+PostDown = iptables  -D FORWARD -i wg0 -j ACCEPT; \
+           iptables  -D FORWARD -o wg0 -j ACCEPT; \
+           iptables  -t nat -D POSTROUTING -o eth0 -j MASQUERADE; \
+           ip6tables -D FORWARD -i wg0 -j ACCEPT; \
+           ip6tables -D FORWARD -o wg0 -j ACCEPT; \
+           ip6tables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+# =============================================================================
+# Peer: Nebenwohnsitz (Raspberry Pi Client)
+# Dieser Abschnitt wird von wireguard-ui beim Anlegen eines Peers hinzugefügt.
+# =============================================================================
+
+[Peer]
+# Name (Kommentar): Nebenwohnsitz
+# Öffentlicher Schlüssel des Clients (wird in der WebUI beim Erstellen angezeigt)
+PublicKey = <CLIENT_PUBLIC_KEY>
+
+# Erlaubte IP-Ranges die über diesen Peer geroutet werden:
+# 10.10.0.2/32   = VPN-IP des Clients (Pflicht)
+# 192.168.20.0/24 = LAN des Nebenwohnsitzes (für Site-to-Site)
+AllowedIPs = 10.10.0.2/32, 192.168.20.0/24
+
+# Keepalive sichert den Tunnel durch CGNAT/DS-Lite (empfohlen: 25s)
+PersistentKeepalive = 25

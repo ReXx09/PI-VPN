@@ -1,0 +1,23 @@
+# Sensible Konfigurationsdateien — NIEMALS in Git committen!
+.env
+**/.env
+
+# WireGuard private Schlüssel und generierte Konfigs
+**/data/wireguard/wg0.conf
+**/data/wireguard/privatekey
+**/data/wireguard/server_privatekey
+**/data/wireguard/publickey
+
+# wireguard-ui Datenbank (enthält Peer-Schlüssel)
+**/data/db/
+
+# ddns-go Konfiguration (enthält API-Token)
+**/data/ddns-go/
+
+# Backups (lokal, nicht in VCS)
+backups/
+*.bak
+
+# Betriebssystem
+.DS_Store
+Thumbs.db

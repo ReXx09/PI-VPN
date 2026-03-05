@@ -1,0 +1,58 @@
+# =============================================================================
+# WireGuard Client-Konfiguration — Nebenwohnsitz
+# Diese Datei wird aus der wireguard-ui WebUI exportiert (QR-Code oder Download).
+# Auf dem Client-Raspi ablegen unter:
+#   /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
+# =============================================================================
+
+[Interface]
+# Privater Schlüssel des Clients (generiert von wireguard-ui oder: wg genkey)
+PrivateKey = <CLIENT_PRIVATE_KEY>
+
+# VPN-IP des Clients im Tunnel-Subnetz
+Address = 10.10.0.2/24
+
+# MTU: 1280 sicher für DS-Lite IPv6 (Vodafone Kabel)
+MTU = 1280
+
+# DNS: VPN-DNS (OPNsense am Hauptwohnsitz) oder Cloud-DNS
+DNS = 10.10.0.1, 1.1.1.1
+
+# iptables für Routing des Heimnetzes Nebenwohnsitz durch den Tunnel
+# Interface anpassen! (eth0 = kabelgebunden, wlan0 = WLAN)
+PostUp   = iptables  -A FORWARD -i wg0 -j ACCEPT; \
+           iptables  -A FORWARD -o wg0 -j ACCEPT; \
+           iptables  -t nat -A POSTROUTING -o eth0 -j MASQUERADE; \
+           ip6tables -A FORWARD -i wg0 -j ACCEPT; \
+           ip6tables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+PostDown = iptables  -D FORWARD -i wg0 -j ACCEPT; \
+           iptables  -D FORWARD -o wg0 -j ACCEPT; \
+           iptables  -t nat -D POSTROUTING -o eth0 -j MASQUERADE; \
+           ip6tables -D FORWARD -i wg0 -j ACCEPT; \
+           ip6tables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+# =============================================================================
+# Peer: Hauptwohnsitz (WireGuard-Server)
+# =============================================================================
+
+[Peer]
+# Öffentlicher Schlüssel des Servers (aus wireguard-ui kopieren)
+PublicKey = <SERVER_PUBLIC_KEY>
+
+# DDNS-Hostname des Servers (AAAA-Record, von ddns-go gepflegt)
+# WireGuard löst diesen IPv6-Hostnamen automatisch auf.
+Endpoint = vpn-home.DEINE-DOMAIN.de:51820
+
+# --- VARIANTE A: Split-Tunnel (empfohlen) ---
+# Nur das Heimnetz des Hauptwohnsitzes und das VPN-Subnetz laufen durch den Tunnel.
+# Normaler Internet-Traffic läuft direkt über Vodafone.
+AllowedIPs = 10.10.0.0/24, 192.168.10.0/24
+
+# --- VARIANTE B: Full-Tunnel (für Streaming-Dienste) ---
+# ALLES läuft über den VPN-Tunnel → erscheint als wärst du am Hauptwohnsitz.
+# Dafür Zeile oben auskommentieren und Zeile unten aktivieren:
+# AllowedIPs = 0.0.0.0/0, ::/0
+
+# Keepalive hält Tunnel durch Fritzbox-NAT und DS-Lite aktiv
+PersistentKeepalive = 25
