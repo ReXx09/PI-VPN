@@ -4,47 +4,93 @@
 #
 # Architektur:
 #   Hauptwohnsitz → OPNsense mit WireGuard-Plugin (Server, kein Raspi dort)
-#   Nebenwohnsitz → Dieser Raspi als WireGuard-Client + optionaler DDNS-Updater
+#   Nebenwohnsitz → Dieser Raspi als WireGuard-Client mit Web-UI + DDNS-Updater
 #
-# Vorbereitung:
-#   1. In OPNsense: VPN → WireGuard → Peer anlegen → Konfig exportieren
-#   2. Exportierte wg0.conf nach ./data/wireguard/wg0.conf kopieren
-#   3. docker compose up -d
+# Stack:
+#   wireguard-ui  → verwaltet das native wg0-Interface + Web-UI auf Port 5000
+#   ddns-go       → hält den AAAA-Record des Raspi aktuell (Port 9876)
+#
+# Hinweis zu "WireGuard nativ":
+#   wireguard-ui nutzt intern wg-quick und das WireGuard-Kernelmodul
+#   (ab Kernel 5.6 eingebaut, kein extra Container nötig).
+#   linuxserver/wireguard wird deshalb NICHT benötigt — beide würden
+#   sonst gleichzeitig wg0 verwalten und sich gegenseitig blockieren.
+#
+# Erststart:
+#   1. cp .env.example .env && nano .env  (Passwörter setzen)
+#   2. docker compose up -d
+#   3. WebUI öffnen: http://<raspi-ip>:5000
+#   4. WireGuard Server-Einstellungen prüfen (VPN-IP: 10.10.0.2/24)
+#   5. Peer hinzufügen: OPNsense als Server eintragen (siehe .env.example)
+#   6. "Apply Config" → Tunnel baut sich automatisch auf
 # =============================================================================
 
 services:
 
   # ---------------------------------------------------------------------------
-  # WireGuard Client
-  # Verbindet sich mit dem OPNsense WireGuard-Server via IPv6.
-  # Konfig: ./data/wireguard/wg0.conf  (aus OPNsense exportiert)
+  # WireGuard-UI
+  # Verwaltet das native wg0-Interface via wg-quick (WireGuard-Kernelmodul).
+  # WebUI zur Peer-Verwaltung und Tunnel-Status: http://<raspi-ip>:5000
+  #
+  # Konfiguration nach dem ersten Start in der WebUI:
+  #   Schritt 1 — "WireGuard Server":
+  #     - Endpoint: <leer lassen oder eigenen DDNS wenn nötig>
+  #     - Listen Port: 51820
+  #     - Server Address: 10.10.0.2/24
+  #     - MTU: 1280
+  #     - DNS: 10.10.0.1 (OPNsense) oder 1.1.1.1
+  #     - Post Up/Down: optional iptables MASQUERADE für LAN-Routing
+  #
+  #   Schritt 2 — "Wireguard Clients" → "+ New Client" (= OPNsense als Peer):
+  #     - Name: OPNsense-Server
+  #     - Public Key: <öffentlicher Schlüssel des OPNsense WireGuard-Servers>
+  #     - Allocated IPs: 10.10.0.1/32
+  #     - Allowed IPs: 10.10.0.0/24, 192.168.10.0/24 (Split) ODER 0.0.0.0/0 (Full)
+  #     - Endpoint: vpn-home.deine-domain.de:51820
+  #     - Persistent Keepalive: 25
+  #
+  #   → "Apply Config" klicken → wg0 startet automatisch
   # ---------------------------------------------------------------------------
-  wireguard:
-    image: linuxserver/wireguard:latest
-    container_name: wireguard-client
+  wireguard-ui:
+    image: ngoduykhanh/wireguard-ui:latest
+    container_name: wireguard-ui
     restart: unless-stopped
 
     cap_add:
       - NET_ADMIN
-      - SYS_MODULE
 
-    volumes:
-      - /lib/modules:/lib/modules:ro
-      - ./data/wireguard:/config
-
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.forwarding=1
+    # HOST-Netz: wg0 wird direkt auf dem Host angelegt.
+    # Nur so funktioniert wg-quick korrekt und iptables-MASQUERADE
+    # für das Fritzbox-Heimnetz (192.168.20.0/24) greift.
+    network_mode: host
 
     environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      - TZ=${TZ:-Europe/Vienna}
+      # --- Login ---
+      - WGUI_USERNAME=${WGUI_USERNAME:-admin}
+      - WGUI_PASSWORD=${WGUI_PASSWORD}
 
-    # HOST-Netz: WireGuard-Interface (wg0) wird direkt auf dem Host
-    # angelegt und iptables-MASQUERADE funktioniert für das Heimnetz.
-    network_mode: host
+      # --- WireGuard Interface (dieser Raspi als Client) ---
+      - WGUI_SERVER_INTERFACE_ADDRESSES=10.10.0.2/24
+      - WGUI_SERVER_LISTEN_PORT=51820
+      - WGUI_MTU=${WGUI_MTU:-1280}
+      - WGUI_DNS=${WGUI_DNS:-10.10.0.1,1.1.1.1}
+      - WGUI_PERSISTENT_KEEPALIVE=25
+
+      # Konfigurationsdatei (wird von wireguard-ui verwaltet)
+      - WGUI_CONFIG_FILE_PATH=/etc/wireguard/wg0.conf
+
+      # WireGuard automatisch starten und bei Änderung neu starten
+      - WGUI_MANAGE_START=true
+      - WGUI_MANAGE_RESTART=true
+
+      # Session-Secret (zufälliger String: openssl rand -hex 32)
+      - SESSION_SECRET=${SESSION_SECRET}
+
+    volumes:
+      # WebUI-Datenbank (Peer-Keys, Einstellungen)
+      - ./data/db:/app/db
+      # WireGuard wg0.conf (wird von wireguard-ui geschrieben)
+      - ./data/wireguard:/etc/wireguard
 
     logging:
       driver: json-file
@@ -55,11 +101,10 @@ services:
   # ---------------------------------------------------------------------------
   # DDNS-Go
   # Hält einen AAAA-Record für die aktuelle IPv6-Adresse des Raspi aktuell.
-  # Nützlich falls OPNsense Firewall-Regeln auf die Client-IP matchen soll,
-  # oder falls der Raspi selbst mal als Endpoint dienen soll.
+  # Nützlich falls OPNsense Firewall-Regeln auf die Client-IPv6 matchen soll.
   #
-  # Hinweis: Die DDNS-Seite des Servers (OPNsense/Starlink) wird direkt in
-  # OPNsense unter Dienste → Dynamisches DNS konfiguriert — kein Container nötig.
+  # Hinweis: Den AAAA-Record des SERVERS (OPNsense/Starlink) konfiguriert man
+  # direkt in OPNsense unter Dienste → Dynamisches DNS.
   #
   # WebUI: http://<raspi-ip>:9876
   # ---------------------------------------------------------------------------

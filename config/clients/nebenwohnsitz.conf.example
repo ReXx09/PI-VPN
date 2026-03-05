@@ -1,8 +1,16 @@
 # =============================================================================
-# WireGuard Client-Konfiguration — Nebenwohnsitz
-# Diese Datei wird aus der wireguard-ui WebUI exportiert (QR-Code oder Download).
-# Auf dem Client-Raspi ablegen unter:
-#   /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
+# WireGuard Client-Konfiguration — Nebenwohnsitz (Referenz)
+#
+# Diese Datei dient als Referenz / Dokumentation.
+# Die wg0.conf wird von wireguard-ui automatisch generiert und verwaltet —
+# NICHT manuell bearbeiten während wireguard-ui läuft!
+#
+# Pfad: /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
+#
+# Konfiguration erfolgt über die wireguard-ui WebUI:
+#   http://<raspi-ip>:5000
+#   → "WireGuard Server" (= lokale Interface-Einstellungen)
+#   → "Wireguard Clients" → "+ New Client" (= OPNsense als Peer eintragen)
 # =============================================================================
 
 [Interface]
