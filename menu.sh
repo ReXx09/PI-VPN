@@ -92,8 +92,19 @@ ddns_status() {
     LAST=$(docker logs ddns-go --tail 5 2>&1 | tr '[:upper:]' '[:lower:]')
     if echo "$LAST" | grep -q "error\|fail\|err"; then
         echo "DDNS: FEHLER ⚠"
+        return
+    fi
+    # Domain aus ddns-go Konfig-Datei lesen (.ddns_go_config.yaml im Volume)
+    local CONF DOMAIN
+    CONF="$DOCKER_DIR/data/ddns-go/.ddns_go_config.yaml"
+    if [[ -f "$CONF" ]]; then
+        DOMAIN=$(grep -i 'domainname' "$CONF" 2>/dev/null \
+            | awk -F': ' '{print $2}' | tr -d '"' | xargs | head -c 30)
+    fi
+    if [[ -n "$DOMAIN" ]]; then
+        echo "DDNS: $DOMAIN ✔"
     else
-        echo "DDNS: OK ✔"
+        echo "DDNS: verbunden ✔"
     fi
 }
 
