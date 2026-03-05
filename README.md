@@ -90,7 +90,8 @@ PI-VPN/
     │   └── init.sh                 # Erstkonfiguration
     └── manage/
         ├── status.sh               # VPN-Status anzeigen
-        └── backup.sh               # Konfig-Backup
+        ├── backup.sh               # Konfig-Backup
+        └── reset.sh                # Alles entfernen / Neu-Test
 ```
 
 ---

@@ -388,7 +388,15 @@ sudo bash /opt/pi-vpn/scripts/manage/backup.sh
 # Updates holen (wenn Token noch aktiv)
 cd /opt/pi-vpn
 sudo git pull
+
+# ── Alles zurücksetzen (für Neu-Tests) ──────────────────────────────────────
+sudo bash /opt/pi-vpn/scripts/manage/reset.sh
 ```
+
+> **Neu-Test / Komplett-Reset:** Das Reset-Skript führt dich interaktiv durch alle
+> Schritte: Tunnel trennen → Container entfernen → Volumes löschen → .env löschen →
+> Docker deinstallieren → Projekt-Verzeichnis löschen.
+> Danach einfach `setup-wizard.sh` erneut ausführen.
 
 ---
 
