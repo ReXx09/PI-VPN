@@ -7,27 +7,30 @@ Raspberry Pi basiertes Site-to-Site VPN zwischen zwei Standorten mit **CGNAT/DS-
 ## Netzwerkübersicht
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              HAUPTWOHNSITZ                          │
-│  Starlink (CGNAT) → OPNsense → LAN 192.168.10.0/24 │
-│                          │                          │
-│                    Raspberry Pi                     │
-│              [wireguard-ui] [ddns-go]               │
-│               WireGuard-Server  :51820              │
-│                VPN-IP: 10.10.0.1                    │
-└────────────────────┬────────────────────────────────┘
-                     │  WireGuard Tunnel
-                     │  über IPv6 (AAAA)
-                     │  (kein öffentl. IPv4 nötig!)
-┌────────────────────┴────────────────────────────────┐
-│              NEBENWOHNSITZ                          │
-│  Vodafone Kabel (DS-Lite) → Fritzbox 6660 →        │
-│                          LAN 192.168.20.0/24        │
-│                          │                          │
-│                    Raspberry Pi                     │
-│              [wireguard-client] [ddns-go]           │
-│                VPN-IP: 10.10.0.2                    │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│              HAUPTWOHNSITZ                           │
+│  Starlink (CGNAT, IPv6 nativ)                        │
+│       │                                              │
+│   OPNsense                                           │
+│   ├── WireGuard-Plugin (Server, Port 51820)          │
+│   ├── Dynamisches DNS → AAAA-Record (eingebaut)      │
+│   └── LAN 192.168.10.0/24    VPN-IP: 10.10.0.1      │
+│                                                      │
+│       ➜ KEIN Raspberry Pi am Hauptwohnsitz nötig!   │
+└─────────────────────┬────────────────────────────────┘
+                      │  WireGuard Tunnel
+                      │  über IPv6 (AAAA)
+                      │  (kein öffentl. IPv4 nötig!)
+┌─────────────────────┴────────────────────────────────┐
+│              NEBENWOHNSITZ                           │
+│  Vodafone Kabel (DS-Lite, IPv6 nativ)                │
+│       │                                              │
+│   Fritzbox 6660 → LAN 192.168.20.0/24               │
+│       │                                              │
+│   Raspberry Pi  ← EINZIGER RASPI                     │
+│   [wireguard-client]  VPN-IP: 10.10.0.2             │
+│   [ddns-go]           (optional)                     │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -44,21 +47,21 @@ Beide Anschlüsse haben **kein öffentlich erreichbares IPv4**, aber **natives I
 
 ---
 
-## Docker-Stack
+## Stack
 
-### Hauptwohnsitz (WireGuard-Server)
+### Hauptwohnsitz — OPNsense (kein Docker, kein Raspi)
 
-| Container       | Image                          | Funktion                          |
-|----------------|-------------------------------|-----------------------------------|
-| `wireguard-ui`  | `ngoduykhanh/wireguard-ui`    | WireGuard-Verwaltung (WebUI)      |
-| `ddns-go`       | `jeessy/ddns-go`              | IPv6-DDNS-Updater                 |
+| Funktion              | Wo konfiguriert                              |
+|----------------------|----------------------------------------------|
+| WireGuard-Server     | OPNsense → VPN → WireGuard (Plugin nativ)   |
+| IPv6-DDNS (AAAA)     | OPNsense → Dienste → Dynamisches DNS        |
 
-### Nebenwohnsitz (WireGuard-Client)
+### Nebenwohnsitz — Raspberry Pi (Docker)
 
-| Container       | Image                          | Funktion                          |
-|----------------|-------------------------------|-----------------------------------|
-| `wireguard`     | `linuxserver/wireguard`       | WireGuard-Client                  |
-| `ddns-go`       | `jeessy/ddns-go`              | IPv6-DDNS-Updater (opt.)          |
+| Container    | Image                    | Funktion                        |
+|-------------|-------------------------|---------------------------------|
+| `wireguard` | `linuxserver/wireguard` | WireGuard-Client                |
+| `ddns-go`   | `jeessy/ddns-go`        | IPv6-DDNS-Updater (optional)    |
 
 ---
 
@@ -68,21 +71,18 @@ Beide Anschlüsse haben **kein öffentlich erreichbares IPv4**, aber **natives I
 PI-VPN/
 ├── README.md
 ├── docker/
-│   ├── hauptwohnsitz/
-│   │   ├── docker-compose.yml      # Server-Stack
-│   │   └── .env.example            # Umgebungsvariablen
 │   └── nebenwohnsitz/
-│       ├── docker-compose.yml      # Client-Stack
-│       └── .env.example
+│       ├── docker-compose.yml      # Einziger Docker-Stack (Raspi)
+│       └── .env.example            # Umgebungsvariablen
 ├── config/
 │   ├── server/
-│   │   └── wg0.conf.example        # WireGuard Server-Konfig
+│   │   └── wg0.conf.example        # OPNsense Peer-Referenz
 │   └── clients/
-│       └── nebenwohnsitz.conf.example  # Peer-Konfig
+│       └── nebenwohnsitz.conf.example  # Raspi Client-Konfig
 ├── docs/
 │   ├── Netzwerkuebersicht.md       # Detaillierte Netzwerkplanung
 │   ├── Setup-Anleitung.md          # Schritt-für-Schritt Guide
-│   ├── OPNsense-Setup.md           # Firewall-Regeln Hauptwohnsitz
+│   ├── OPNsense-WireGuard.md       # WireGuard-Plugin in OPNsense
 │   └── Fritzbox-IPv6-Setup.md      # IPv6-Freigabe Nebenwohnsitz
 └── scripts/
     ├── setup/
@@ -97,32 +97,33 @@ PI-VPN/
 
 ## Schnellstart
 
-### 1. Raspi vorbereiten (beide Standorte)
+### 1. OPNsense (Hauptwohnsitz) — WireGuard-Server einrichten
+Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
+- WireGuard-Plugin aktivieren, Schlüsselpaar generieren
+- Peer `nebenwohnsitz` anlegen
+- Konfig für den Raspi exportieren
+- Dynamisches DNS einrichten (AAAA-Record)
+
+### 2. Raspberry Pi (Nebenwohnsitz) — Docker installieren
 ```bash
 cd /opt
-sudo git clone <dieses-repo> pi-vpn
+sudo git clone https://github.com/ReXx09/PI-VPN.git pi-vpn
 cd pi-vpn
 sudo bash scripts/setup/install-docker.sh
+sudo bash scripts/setup/init.sh nebenwohnsitz
 ```
 
-### 2. Hauptwohnsitz starten
+### 3. WireGuard-Konfig einspielen + starten
 ```bash
-cp docker/hauptwohnsitz/.env.example docker/hauptwohnsitz/.env
-nano docker/hauptwohnsitz/.env      # Passwörter & DNS-Token setzen
-cd docker/hauptwohnsitz
-sudo docker compose up -d
-# WebUI: http://<raspi-ip>:5000
-# DDNS-UI: http://<raspi-ip>:9876
-```
+# Exportierte wg0.conf von OPNsense ablegen:
+cp /pfad/zur/wg0.conf /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
 
-### 3. Nebenwohnsitz starten
-```bash
-cp docker/nebenwohnsitz/.env.example docker/nebenwohnsitz/.env
-nano docker/nebenwohnsitz/.env
-# WireGuard-Konfig aus der WebUI exportieren und nach
-# /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf kopieren
-cd docker/nebenwohnsitz
+cd /opt/pi-vpn/docker/nebenwohnsitz
 sudo docker compose up -d
+
+# Status prüfen:
+sudo docker exec wireguard-client wg show
+# DDNS-WebUI: http://<raspi-ip>:9876
 ```
 
 ---
@@ -139,7 +140,9 @@ Details → [docs/Setup-Anleitung.md](docs/Setup-Anleitung.md)
 
 ## Anforderungen
 
-- Raspberry Pi 4 (oder 5) mit Raspberry Pi OS Bookworm (64-bit)
-- Docker ≥ 24.x & Docker Compose ≥ 2.x
-- DDNS-Provider mit AAAA-Unterstützung (z. B. Cloudflare, DeSEC, Duck DNS)
-- IPv6 am Standort aktiv und per DDNS auflösbar
+- **Hauptwohnsitz:** OPNsense ≥ 21.7 (WireGuard-Plugin verfügbar)
+- **Nebenwohnsitz:** 1× Raspberry Pi 4 oder 5 mit Raspberry Pi OS Bookworm (64-bit)
+- Docker ≥ 24.x & Docker Compose ≥ 2.x (nur auf dem Raspi)
+- DDNS-Provider mit AAAA-Unterstützung (Cloudflare empfohlen)
+  - Hauptwohnsitz: direkt in OPNsense unter Dienste → Dynamisches DNS
+  - Nebenwohnsitz: ddns-go Container (optional)

@@ -1,15 +1,23 @@
 # =============================================================================
-# NEBENWOHNSITZ — Docker Compose
+# NEBENWOHNSITZ — Docker Compose (einziger Raspi-Stack)
 # Vodafone Kabel (DS-Lite) + Fritzbox 6660 + Raspberry Pi
-# WireGuard-Client + DDNS-Updater (IPv6, optional)
+#
+# Architektur:
+#   Hauptwohnsitz → OPNsense mit WireGuard-Plugin (Server, kein Raspi dort)
+#   Nebenwohnsitz → Dieser Raspi als WireGuard-Client + optionaler DDNS-Updater
+#
+# Vorbereitung:
+#   1. In OPNsense: VPN → WireGuard → Peer anlegen → Konfig exportieren
+#   2. Exportierte wg0.conf nach ./data/wireguard/wg0.conf kopieren
+#   3. docker compose up -d
 # =============================================================================
 
 services:
 
   # ---------------------------------------------------------------------------
   # WireGuard Client
-  # Verbindet sich mit dem WireGuard-Server am Hauptwohnsitz via IPv6.
-  # Die wg0.conf wird aus der wireguard-ui WebUI exportiert und hier abgelegt.
+  # Verbindet sich mit dem OPNsense WireGuard-Server via IPv6.
+  # Konfig: ./data/wireguard/wg0.conf  (aus OPNsense exportiert)
   # ---------------------------------------------------------------------------
   wireguard:
     image: linuxserver/wireguard:latest
@@ -20,25 +28,22 @@ services:
       - NET_ADMIN
       - SYS_MODULE
 
-    # Kernel-Modul-Zugriff (WireGuard ist ab Kernel 5.6 eingebaut)
     volumes:
       - /lib/modules:/lib/modules:ro
       - ./data/wireguard:/config
 
-    # IPv4-Forwarding und IPv6-Forwarding aktivieren
-    # (nötig damit der Tunnel als Gateway für andere Geräte dienen kann)
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1
       - net.ipv6.conf.all.forwarding=1
 
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Vienna
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Europe/Vienna}
 
-    # Interne Port-Exposition nicht nötig (Client initiiert Verbindung)
-    # Aber für PostUp-Skripte mit iptables nötig:
+    # HOST-Netz: WireGuard-Interface (wg0) wird direkt auf dem Host
+    # angelegt und iptables-MASQUERADE funktioniert für das Heimnetz.
     network_mode: host
 
     logging:
@@ -48,9 +53,14 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # DDNS-Go (optional am Nebenwohnsitz)
-  # Nützlich wenn der Server die Client-IPv6 für Firewall-Regeln kennen muss.
-  # Kann auch weggelassen werden wenn nur als Client gearbeitet wird.
+  # DDNS-Go
+  # Hält einen AAAA-Record für die aktuelle IPv6-Adresse des Raspi aktuell.
+  # Nützlich falls OPNsense Firewall-Regeln auf die Client-IP matchen soll,
+  # oder falls der Raspi selbst mal als Endpoint dienen soll.
+  #
+  # Hinweis: Die DDNS-Seite des Servers (OPNsense/Starlink) wird direkt in
+  # OPNsense unter Dienste → Dynamisches DNS konfiguriert — kein Container nötig.
+  #
   # WebUI: http://<raspi-ip>:9876
   # ---------------------------------------------------------------------------
   ddns-go:
