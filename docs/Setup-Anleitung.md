@@ -353,6 +353,21 @@ Optional — nützlich wenn OPNsense Firewall-Regeln auf die Client-IPv6 setzen 
 
 `http://<raspi-ip>:9876`
 
+> ⚠️ **Wichtig — Login-Zeitfenster beachten:**
+> ddns-go gibt beim **ersten Start** nur ein kurzes Zeitfenster (~5 Minuten) um den
+> Admin-Account einzurichten. Öffne die WebUI daher **sofort** nach dem ersten
+> Container-Start und klicke auf:
+> **„Login and configure as an administrator account"**
+>
+> Erscheint stattdessen die Fehlermeldung:
+> *„Need to complete the username and password setting before …, please restart ddns-go"*
+> → Das Zeitfenster ist abgelaufen. Lösung:
+> ```bash
+> sudo docker restart ddns-go
+> # Dann sofort WebUI öffnen: http://<raspi-ip>:9876
+> ```
+> Oder über das Menü: **🐳 Container-Verwaltung → ddns-go neu starten**
+
 ### E2 — Konfigurieren
 
 1. Provider wählen: **Cloudflare**
@@ -444,6 +459,7 @@ sudo bash /opt/pi-vpn/scripts/manage/reset.sh
 |--------------------------------------|--------------------------------------|---------------------------------------------------------------|
 | `git: command not found`             | git nicht vorinstalliert (frisches RPi OS) | `sudo apt update && sudo apt install -y git`            |
 | `git clone` schlägt stillschweigend fehl | Token abgelaufen oder falsch       | Neuen Fine-grained Token erstellen (Teil B2)                  |
+| ddns-go: „Need to complete username/password…" | Login-Zeitfenster abgelaufen | `sudo docker restart ddns-go` → sofort WebUI öffnen (Teil E1) |
 | Tunnel baut sich nicht auf           | Fritzbox-Portfreigabe fehlt          | Teil D2 erneut prüfen                                         |
 | „latest handshake" veraltet         | DDNS-Record outdated                 | ddns-go WebUI → „Einmalig aktualisieren"                      |
 | Tunnel aktiv aber kein LAN-Ping      | Route in OPNsense/Fritzbox fehlt     | Teil A7 bzw. D3 prüfen                                        |
