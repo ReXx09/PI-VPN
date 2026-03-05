@@ -81,25 +81,26 @@ ddns_status() {
         echo "DDNS: ?"
         return
     fi
-    local STATE
+    local STATE=""
     STATE=$(docker inspect -f '{{.State.Running}}' ddns-go 2>/dev/null || echo "false")
     if [[ "$STATE" != "true" ]]; then
         echo "DDNS: GESTOPPT ✘"
         return
     fi
     # Letzte Log-Zeilen auf Fehler prüfen
-    local LAST
-    LAST=$(docker logs ddns-go --tail 5 2>&1 | tr '[:upper:]' '[:lower:]')
-    if echo "$LAST" | grep -q "error\|fail\|err"; then
+    local LAST=""
+    LAST=$(docker logs ddns-go --tail 5 2>&1 || true)
+    LAST=$(echo "$LAST" | tr '[:upper:]' '[:lower:]' || true)
+    if echo "$LAST" | grep -qE "error|fail" 2>/dev/null; then
         echo "DDNS: FEHLER ⚠"
         return
     fi
     # Domain aus ddns-go Konfig-Datei lesen (.ddns_go_config.yaml im Volume)
-    local CONF DOMAIN
-    CONF="$DOCKER_DIR/data/ddns-go/.ddns_go_config.yaml"
+    local CONF="$DOCKER_DIR/data/ddns-go/.ddns_go_config.yaml"
+    local DOMAIN=""
     if [[ -f "$CONF" ]]; then
         DOMAIN=$(grep -i 'domainname' "$CONF" 2>/dev/null \
-            | awk -F': ' '{print $2}' | tr -d '"' | xargs | head -c 30)
+            | awk -F': ' '{print $2}' | tr -d '"' | xargs 2>/dev/null | head -c 30 || true)
     fi
     if [[ -n "$DOMAIN" ]]; then
         echo "DDNS: $DOMAIN ✔"
