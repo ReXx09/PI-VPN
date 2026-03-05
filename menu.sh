@@ -119,13 +119,13 @@ main_menu_whiptail() {
             --title "PI-VPN | Zentrales Menue  |  $(hostname)" \
             --menu "${STATUS_LINE}\n\nWähle eine Kategorie:" \
             22 72 8 \
-            "1" "  ⚙  Setup & Installation" \
-            "2" "  ◉  Status & Monitoring" \
-            "3" "  ▣  Container-Verwaltung" \
-            "4" "  ✎  Konfiguration & Updates" \
-            "5" "  ↺  Reset & Deinstallation" \
-            "6" "  ◎  WebUI-Adressen anzeigen" \
-            "0" "  ✖  Beenden" \
+            "1" "  [SETUP]      Setup & Installation" \
+            "2" "  [STATUS]     Status & Monitoring" \
+            "3" "  [CONTAINER]  Container-Verwaltung" \
+            "4" "  [CONFIG]     Konfiguration & Updates" \
+            "5" "  [RESET]      Reset & Deinstallation" \
+            "6" "  [WEBUI]      WebUI-Adressen anzeigen" \
+            "0" "  [X]          Beenden" \
             3>&1 1>&2 2>&3) || break
 
         case "$CHOICE" in
@@ -473,12 +473,12 @@ main_menu_text() {
     while true; do
         banner_text
         blank
-        echo -e "  ${BOLD}[1]${NC}  ⚙  Setup & Installation"
-        echo -e "  ${BOLD}[2]${NC}  ◉  Status & Monitoring"
-        echo -e "  ${BOLD}[3]${NC}  ▣  Container-Verwaltung"
-        echo -e "  ${BOLD}[4]${NC}  ✎  Konfiguration & Updates"
-        echo -e "  ${BOLD}[5]${NC}  ↺  Reset & Deinstallation"
-        echo -e "  ${BOLD}[6]${NC}  ◎  WebUI-Adressen anzeigen"
+        echo -e "  ${BOLD}[1]${NC}  [SETUP]      Setup & Installation"
+        echo -e "  ${BOLD}[2]${NC}  [STATUS]     Status & Monitoring"
+        echo -e "  ${BOLD}[3]${NC}  [CONTAINER]  Container-Verwaltung"
+        echo -e "  ${BOLD}[4]${NC}  [CONFIG]     Konfiguration & Updates"
+        echo -e "  ${BOLD}[5]${NC}  [RESET]      Reset & Deinstallation"
+        echo -e "  ${BOLD}[6]${NC}  [WEBUI]      WebUI-Adressen anzeigen"
         blank
         divider_text
         echo -e "  ${BOLD}[0]${NC}  Beenden"
@@ -506,7 +506,7 @@ main_menu_text() {
 text_setup() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}⚙  Setup & Installation${NC}"; blank
+        echo -e "  ${BOLD}[SETUP] Setup & Installation${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  Vollständige Installation  (setup-wizard.sh)"
         echo -e "  ${BOLD}[2]${NC}  Nur Docker CE installieren (install-docker.sh)"
         echo -e "  ${BOLD}[3]${NC}  Verzeichnisse anlegen      (init.sh)"
@@ -525,7 +525,7 @@ text_setup() {
 text_status() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}◉  Status & Monitoring${NC}"; blank
+        echo -e "  ${BOLD}[STATUS] Status & Monitoring${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  Vollständiger VPN-Status (status.sh)"
         echo -e "  ${BOLD}[2]${NC}  wireguard-ui Logs"
         echo -e "  ${BOLD}[3]${NC}  ddns-go Logs"
@@ -550,7 +550,7 @@ text_status() {
 text_container() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}▣  Container-Verwaltung${NC}"
+        echo -e "  ${BOLD}[CONTAINER] Container-Verwaltung${NC}"
         echo -e "  ${DIM}wireguard-ui: $(docker inspect -f '{{.State.Status}}' wireguard-ui 2>/dev/null || echo 'n/a')  |  ddns-go: $(docker inspect -f '{{.State.Status}}' ddns-go 2>/dev/null || echo 'n/a')${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  Alle Container starten"
         echo -e "  ${BOLD}[2]${NC}  Alle Container stoppen"
@@ -581,7 +581,7 @@ text_container() {
 text_config() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}✎  Konfiguration & Updates${NC}"; blank
+        echo -e "  ${BOLD}[CONFIG] Konfiguration & Updates${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  .env-Datei bearbeiten (nano)"
         echo -e "  ${BOLD}[2]${NC}  docker-compose.yml anzeigen"
         echo -e "  ${BOLD}[3]${NC}  Updates holen (git pull)"
