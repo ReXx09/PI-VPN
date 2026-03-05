@@ -171,12 +171,31 @@ sudo git clone https://DEIN_TOKEN@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 >
 > **Achtung:** Den Token niemals mit Leerzeichen oder Anführungszeichen eingeben — direkt nahtlos im URL ersetzen.
 
-### B4 — Setup-Wizard starten
+### B4 — Zentrales Menü starten
+
+Nach dem Klonen ist das **zentrale Menü** der empfohlene Einstiegspunkt für alle Aktionen:
 
 ```bash
-cd /opt/pi-vpn
-sudo bash scripts/setup/setup-wizard.sh
+sudo bash /opt/pi-vpn/menu.sh
 ```
+
+Das Menü öffnet eine interaktive TUI-Oberfläche (erfordert `whiptail`, auf Raspberry Pi OS vorinstalliert):
+
+```
++----------------------------------------------+
+| PI-VPN | Zentrales Menue  | pi               |
+|                                              |
+|  1  [SETUP]      Setup & Installation        |
+|  2  [STATUS]     Status & Monitoring         |
+|  3  [CONTAINER]  Container-Verwaltung        |
+|  4  [CONFIG]     Konfiguration & Updates     |
+|  5  [RESET]      Reset & Deinstallation      |
+|  6  [WEBUI]      WebUI-Adressen anzeigen     |
+|  0  [X]          Beenden                    |
++----------------------------------------------+
+```
+
+**→ Wähle `1` (Setup & Installation) → `1` (Vollständige Installation)**
 
 Der Wizard führt dich interaktiv durch:
 
@@ -381,8 +400,14 @@ sudo bash /opt/pi-vpn/scripts/manage/status.sh
 ## Nützliche Befehle
 
 ```bash
-# WireGuard-Status
+# Zentrales Menü — empfohlener Einstieg für alle Aktionen
+sudo bash /opt/pi-vpn/menu.sh
+
+# WireGuard-Status (direkt)
 sudo docker exec wireguard-ui wg show
+
+# Vollständiger VPN-Status
+sudo bash /opt/pi-vpn/scripts/manage/status.sh
 
 # Container-Logs
 sudo docker logs wireguard-ui --tail 50
@@ -403,21 +428,24 @@ sudo git pull
 sudo bash /opt/pi-vpn/scripts/manage/reset.sh
 ```
 
-> **Neu-Test / Komplett-Reset:** Das Reset-Skript führt dich interaktiv durch alle
-> Schritte: Tunnel trennen → Container entfernen → Volumes löschen → .env löschen →
-> Docker deinstallieren → Projekt-Verzeichnis löschen.
-> Danach einfach `setup-wizard.sh` erneut ausführen.
+> **Neu-Test / Komplett-Reset:** `reset.sh` führt dich interaktiv durch alle 8 Schritte:
+> Tunnel trennen → Container entfernen → Volumes löschen → .env löschen →
+> Docker deinstallieren (optional) → Projektverzeichnis löschen (optional).
+> Danach: `sudo git clone ...` und `sudo bash /opt/pi-vpn/menu.sh` erneut ausführen.
 
 ---
 
 ## Häufige Probleme
 
-| Problem                         | Ursache                              | Lösung                                          |
-|---------------------------------|--------------------------------------|-------------------------------------------------|
-| Tunnel baut sich nicht auf      | Fritzbox-Portfreigabe fehlt          | Teil D2 erneut prüfen                           |
-| „latest handshake" veraltet     | DDNS-Record outdated                 | ddns-go WebUI → „Einmalig aktualisieren"        |
-| Tunnel aktiv aber kein LAN-Ping | Route in OPNsense/Fritzbox fehlt     | Teil A7 bzw. D3 prüfen                          |
-| wg0 startet nicht               | iptables-Fehler (falsches Interface) | `LAN_IFACE` im Wizard prüfen: `ip link show`    |
-| wireguard-ui startet nicht      | Port 5000 belegt                     | `sudo ss -tlnp | grep 5000`                     |
-| IPv6 nicht verfügbar            | Fritzbox IPv6 deaktiviert            | Teil D1 → IPv6 aktivieren                       |
+| Problem                              | Ursache                              | Lösung                                                        |
+|--------------------------------------|--------------------------------------|---------------------------------------------------------------|
+| `git: command not found`             | git nicht vorinstalliert (frisches RPi OS) | `sudo apt update && sudo apt install -y git`            |
+| `git clone` schlägt stillschweigend fehl | Token abgelaufen oder falsch       | Neuen Fine-grained Token erstellen (Teil B2)                  |
+| Tunnel baut sich nicht auf           | Fritzbox-Portfreigabe fehlt          | Teil D2 erneut prüfen                                         |
+| „latest handshake" veraltet         | DDNS-Record outdated                 | ddns-go WebUI → „Einmalig aktualisieren"                      |
+| Tunnel aktiv aber kein LAN-Ping      | Route in OPNsense/Fritzbox fehlt     | Teil A7 bzw. D3 prüfen                                        |
+| wg0 startet nicht                    | iptables-Fehler (falsches Interface) | `LAN_IFACE` im Wizard prüfen: `ip link show`                  |
+| wireguard-ui startet nicht           | Port 5000 belegt                     | `sudo ss -tlnp \| grep 5000`                                  |
+| IPv6 nicht verfügbar                 | Fritzbox IPv6 deaktiviert            | Teil D1 → IPv6 aktivieren                                     |
+| Menü zeigt abgeschnittene Zeichen    | Terminal zu schmal                   | Terminal auf mindestens 80×24 Zeichen vergrößern              |
 
