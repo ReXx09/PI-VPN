@@ -14,6 +14,45 @@ WireGuard-Server nativ                                        wireguard-ui + ddn
 > **Befehls-Referenz:** Alle Aktionen auch direkt ohne Menü aufrufbar →
 > [Befehls-Referenz.md](Befehls-Referenz.md)
 
+---
+
+## Inhaltsverzeichnis
+
+- [Überblick](#überblick-was-wird-wo-eingerichtet)
+- **[Teil A — Hauptwohnsitz: OPNsense](#teil-a--hauptwohnsitz-opnsense-einrichten)**
+  - [A1 — WireGuard-Plugin installieren](#a1--wireguard-plugin-installieren)
+  - [A2 — Dynamisches DNS (AAAA)](#a2--dynamisches-dns-aaaa-einrichten)
+  - [A3 — WireGuard-Server konfigurieren](#a3--wireguard-server-konfigurieren)
+  - [A4 — Firewall-Regel UDP 51820](#a4--firewall-regel-wan--udp-51820)
+  - [A5 — WireGuard aktivieren](#a5--wireguard-aktivieren)
+  - [A6 — Peer vorbereiten](#a6--peer-nebenwohnsitz-vorbereiten)
+  - [A7 — Statische Routen](#a7--statische-routen-für-das-nebenwohnsitz-lan)
+- **[Teil B — Nebenwohnsitz: Raspberry Pi](#teil-b--nebenwohnsitz-raspberry-pi-einrichten)**
+  - [B1 — Raspberry Pi OS installieren](#b1--raspberry-pi-os-installieren)
+  - [B2 — GitHub Token erstellen](#b2--github-personal-access-token-erstellen)
+  - [B3 — Repo klonen](#b3--projekt-auf-den-raspberry-pi-klonen)
+  - [B4 — Zentrales Menü starten](#b4--zentrales-menü-starten)
+  - [B5 — Public Key ermitteln](#b5--public-key-des-raspi-ermitteln)
+- **[Teil C — wireguard-ui WebUI konfigurieren](#teil-c--wireguard-ui-webui-konfigurieren)**
+  - [C1 — Server-Einstellungen prüfen](#c1--wireguard-server-einstellungen-prüfen)
+  - [C2 — OPNsense als Peer eintragen](#c2--opnsense-als-peer-eintragen)
+  - [C3 — Tunnelstatus prüfen](#c3--tunnelstatus-prüfen)
+- **[Teil D — Fritzbox 6660 konfigurieren](#teil-d--fritzbox-6660-konfigurieren)**
+  - [D1 — IPv6 aktivieren](#d1--ipv6-aktivieren)
+  - [D2 — Portfreigabe für WireGuard](#d2--portfreigabe-für-wireguard)
+  - [D3 — Statische Route (optional)](#d3--statische-route-optional-für-alle-fritzbox-geräte)
+- **[Teil E — DDNS für den Raspberry Pi](#teil-e--ddns-für-den-raspberry-pi-nebenwohnsitz)**
+  - [E1 — ddns-go WebUI öffnen](#e1--ddns-go-webui-öffnen)
+  - [E2 — Konfigurieren](#e2--konfigurieren)
+- **[Teil F — Verbindung testen](#teil-f--verbindung-vollständig-testen)**
+  - [F1 — VPN-Tunnel](#f1--vpn-tunnel)
+  - [F2 — Streaming-Test](#f2--streaming-test-full-tunnel)
+  - [F3 — Nach einem Neustart](#f3--nach-einem-neustart)
+- [Nützliche Befehle](#nützliche-befehle)
+- [Häufige Probleme](#häufige-probleme)
+
+---
+
 ## Überblick: Was wird wo eingerichtet?
 
 | Standort       | Gerät          | Was                                          |
