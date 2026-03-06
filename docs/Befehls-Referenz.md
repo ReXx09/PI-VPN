@@ -149,6 +149,54 @@ hostname -I | awk '{print $1}'
 
 ---
 
+## Diagnose & Tools
+
+> Entspricht **Menüpunkt 7 „🔬 Diagnose & Tools"** in `menu.sh`
+
+```bash
+# ── Tools installieren (falls nicht vorhanden) ───────────────────────────────
+sudo apt-get install -y tcpdump dnsutils nmap
+
+# ── WireGuard Handshake prüfen ───────────────────────────────────────────────
+sudo wg show wg0
+# Zeigt: latest handshake, Transfer-Bytes, Endpoint
+
+# Alter des letzten Handshakes in Sekunden:
+LAST=$(sudo wg show wg0 latest-handshakes | awk '{print $2}')
+echo "Handshake vor $(( $(date +%s) - LAST )) Sekunden"
+
+# ── DNS-Auflösung testen ─────────────────────────────────────────────────────
+dig A    vpn.rexxlab.uk +short   # Sollte leer sein (kein A-Record!)
+dig AAAA vpn.rexxlab.uk +short   # Muss 2a0d:3344:... zurückgeben
+
+# ── Ping VPN-Gateway ─────────────────────────────────────────────────────────
+ping -c 4 10.10.0.1              # Raspi selbst (VPN-Interface)
+ping -c 4 10.10.0.3              # OPNsense (wenn verbunden)
+
+# ── Ping Heimnetz-Gateways ───────────────────────────────────────────────────
+ping -c 4 192.168.20.1           # Fritzbox (Nebenwohnsitz)
+ping -c 4 192.168.8.1            # OPNsense LAN (Hauptwohnsitz, nur via Tunnel)
+
+# ── IPv6-Adresse prüfen ──────────────────────────────────────────────────────
+ip -6 addr show eth0 | grep "scope global"   # Lokale IPv6 des Raspi
+curl -6 -s ifconfig.co                        # Öffentliche IPv6 (sollte Raspi sein)
+
+# ── tcpdump UDP 51820 live ───────────────────────────────────────────────────
+sudo tcpdump -i eth0 udp port 51820 -n       # Zeigt ein-/ausgehende WG-Pakete
+
+# ── Vollständiger Diagnose-Report ────────────────────────────────────────────
+echo "=== wg show ===" && sudo wg show wg0
+echo "=== DNS A ===" && dig A vpn.rexxlab.uk +short
+echo "=== DNS AAAA ===" && dig AAAA vpn.rexxlab.uk +short
+echo "=== Ping VPN-GW ===" && ping -c 2 10.10.0.1
+echo "=== Ping Fritzbox ===" && ping -c 2 192.168.20.1
+echo "=== IPv6 lokal ===" && ip -6 addr show eth0 | grep "scope global"
+echo "=== IPv6 öffentlich ===" && curl -6 -s --max-time 5 ifconfig.co
+echo "=== IP-Forwarding ===" && sysctl net.ipv4.ip_forward
+```
+
+---
+
 ## Einzelne WireGuard-Befehle (low-level)
 
 ```bash

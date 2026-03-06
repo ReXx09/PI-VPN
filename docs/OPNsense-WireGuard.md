@@ -1,7 +1,20 @@
-# OPNsense WireGuard-Plugin — Hauptwohnsitz (Server)
+# OPNsense WireGuard-Plugin — Hauptwohnsitz (Client)
 
-OPNsense übernimmt die Server-Rolle vollständig über das **native WireGuard-Plugin**.
-**Kein Raspberry Pi am Hauptwohnsitz nötig.**
+OPNsense übernimmt die **Client-Rolle** im VPN. Der WireGuard-Server läuft auf dem **Raspberry Pi am Nebenwohnsitz**.
+
+OPNsense verbindet sich aktiv nach außen zu `vpn.rexxlab.uk:51820` — Starlink blockiert ausgehende Verbindungen nicht.
+
+> **Wichtig:** OPNsense hat **keinen eigenen DDNS-Dienst** (nicht in Services vorhanden). Das DDNS (`vpn.rexxlab.uk`) wird ausschließlich durch **ddns-go auf dem Raspberry Pi** aktualisiert.
+
+---
+
+## Netzwerk-Übersicht
+
+| Standort | LAN | VPN-IP | Rolle |
+|----------|-----|--------|-------|
+| Nebenwohnsitz — Raspi | `192.168.20.0/24` | `10.10.0.1/24` | WireGuard Server |
+| Hauptwohnsitz — OPNsense | `192.168.8.0/24` | `10.10.0.3/24` | WireGuard Client |
+| Handy (Thomas-Handy) | — | `10.10.0.2/32` | WireGuard Client |
 
 ---
 
@@ -13,147 +26,163 @@ OPNsense übernimmt die Server-Rolle vollständig über das **native WireGuard-P
 
 ---
 
-## Schritt 1 — Dynamisches DNS einrichten (IPv6 / AAAA)
+## Schritt 1 — Public Key des Raspi ermitteln
 
-Da Starlink ein dynamisches IPv6-Prefix vergibt muss der AAAA-Record automatisch aktualisiert werden.
-
-**OPNsense → Dienste → Dynamisches DNS → [+] Hinzufügen**
-
-| Feld            | Wert                                             |
-|----------------|--------------------------------------------------|
-| Dienst         | Cloudflare (oder DeSEC / Duck DNS)               |
-| Interface      | WAN                                              |
-| Hostname       | `vpn-home.deine-domain.de`                       |
-| Token/Passwort | Cloudflare API-Token (DNS:Edit-Berechtigung)     |
-| Protokoll      | **IPv6 (AAAA)**                                  |
-| Intervall      | 5 Minuten                                        |
-
-→ **Speichern** → **Einmalig aktualisieren** klicken und AAAA-Record prüfen.
-
-> **Cloudflare Token erstellen:** dash.cloudflare.com → Profil → API-Token → Token erstellen → Vorlage "Zone DNS bearbeiten" → nur deine Zone wählen.
-
----
-
-## Schritt 2 — WireGuard-Server konfigurieren
-
-**OPNsense → VPN → WireGuard → Lokal → [+] Hinzufügen**
-
-| Feld               | Wert                                     |
-|-------------------|------------------------------------------|
-| Name              | `wg-server`                              |
-| Listen-Port       | `51820`                                  |
-| Tunnel-Adressen   | `10.10.0.1/24`                           |
-| MTU               | `1280` (Starlink IPv6 — verhindert Fragmentierung) |
-| DNS               | `192.168.10.1` (OPNsense selbst als DNS) |
-
-Schlüsselpaar wird automatisch generiert → **Speichern**.
-
----
-
-## Schritt 3 — Peer (Nebenwohnsitz-Raspi) anlegen
-
-Der Public Key des Raspi wird nach Schritt 4 hier eingetragen.
-
-**OPNsense → VPN → WireGuard → Endpunkte → [+] Hinzufügen**
-
-| Feld               | Wert                                          |
-|-------------------|-----------------------------------------------|
-| Name              | `nebenwohnsitz`                               |
-| Öffentl. Schlüssel| (Public Key des Raspi — nach Schritt 4)       |
-| Erlaubte IPs      | `10.10.0.2/32, 192.168.20.0/24`              |
-| Keepalive         | `25`                                          |
-| Endpunkt-Host     | (leer lassen — Client stellt Verbindung her) |
-
-→ **Speichern**
-
----
-
-## Schritt 4 — Public Key des Raspi ermitteln
-
-Der `linuxserver/wireguard` Container generiert beim ersten Start automatisch ein Schlüsselpaar.
+Auf dem Raspberry Pi:
 
 ```bash
-# Auf dem Raspberry Pi (nach erstem docker compose up -d):
-sudo docker exec wireguard-client cat /config/wg_confs/wg0.conf | grep PrivateKey
-# oder direkt den Public Key:
-sudo docker exec wireguard-client sh -c "wg pubkey < /config/privatekey"
+sudo wg show wg0 public-key
 ```
 
-→ Diesen Public Key in OPNsense → Endpunkte → nebenwohnsitz eintragen.
+Diesen Public Key notieren — er wird in Schritt 3 (Peer) eingetragen.
+
+---
+
+## Schritt 2 — WireGuard Instance anlegen
+
+**OPNsense → VPN → WireGuard → Instances → [+] Add**
+
+| Feld | Wert |
+|------|------|
+| Enabled | ✅ |
+| Name | `PIVPN` |
+| Public key | *(Zahnrad-Icon klicken → Schlüsselpaar generieren)* |
+| Private key | *(wird automatisch generiert)* |
+| Listen port | *(leer lassen — OPNsense ist Client)* |
+| MTU | `1420` |
+| DNS servers | `192.168.8.1` *(OPNsense selbst)* |
+| Tunnel address | `10.10.0.3/24` |
+| Peers | *(nach Schritt 3 hier eintragen)* |
+| Disable routes | ☐ |
+
+→ **Save**
+
+> **Hinweis:** Den generierten **Public Key der OPNsense-Instance** notieren — er muss in wireguard-ui auf dem Raspi als Peer eingetragen werden.
+
+---
+
+## Schritt 3 — Peer (Raspi) anlegen
+
+**OPNsense → VPN → WireGuard → Peers → [+] Add**
+
+| Feld | Wert |
+|------|------|
+| Enabled | ✅ |
+| Name | `Raspi-Nebenwohnsitz` |
+| Public key | *(Public Key des Raspi aus Schritt 1)* |
+| Pre-shared key | *(optional — aus wireguard-ui kopieren falls gesetzt)* |
+| Allowed IPs | `10.10.0.0/24, 192.168.20.0/24` |
+| Endpoint address | `vpn.rexxlab.uk` |
+| Endpoint port | `51820` |
+| Instances | `PIVPN` *(die in Schritt 2 erstellte Instance)* |
+| Keepalive interval | `25` |
+
+→ **Save**
+
+---
+
+## Schritt 4 — Instance mit Peer verknüpfen
+
+Zurück zu **VPN → WireGuard → Instances → PIVPN → Bearbeiten**
+
+→ Im Feld **Peers** den soeben angelegten `Raspi-Nebenwohnsitz` auswählen → **Save**
 
 ---
 
 ## Schritt 5 — WireGuard aktivieren
 
-**OPNsense → VPN → WireGuard → Allgemein**
+**OPNsense → VPN → WireGuard → General**
 
-→ **WireGuard aktivieren** ✅ → **Speichern & Anwenden**
-
----
-
-## Schritt 6 — Firewall-Regeln
-
-### WAN: UDP 51820 eingehend erlauben
-
-**OPNsense → Firewall → Regeln → WAN → [+] Hinzufügen**
-
-| Feld      | Wert                              |
-|-----------|-----------------------------------|
-| Aktion    | Passieren                         |
-| Interface | WAN                               |
-| Protokoll | UDP                               |
-| Quelle    | Beliebig                          |
-| Ziel      | WAN-Adresse                       |
-| Port      | `51820`                           |
-
-> Für IPv4 (CGNAT): **nicht möglich** — ausschließlich IPv6 nutzen.
-
-### WireGuard-Interface: Traffic erlauben
-
-**OPNsense → Firewall → Regeln → WireGuard (wg0) → [+] Hinzufügen**
-
-| Feld      | Wert      |
-|-----------|-----------|
-| Aktion    | Passieren |
-| Protokoll | Beliebig  |
-| Quelle    | Beliebig  |
-| Ziel      | Beliebig  |
+→ **Enable WireGuard** ✅ → **Save**
 
 ---
 
-## Schritt 7 — Client-Konfig für den Raspi exportieren
+## Schritt 6 — Interface zuweisen
 
-**OPNsense → VPN → WireGuard → Lokal** → `wg-server` → **"Clients"** → `nebenwohnsitz` → **Download**
+**OPNsense → Interfaces → Assignments**
 
-Die heruntergeladene `wg0.conf` auf dem Raspi ablegen:
+→ Neues Interface auf `wg1` zuweisen → **Add** → Interface öffnen:
 
-```bash
-# Auf dem Raspberry Pi:
-mkdir -p /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard
-# conf-Datei kopieren (scp, USB-Stick, etc.)
-cp wg0.conf /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
-```
+| Feld | Wert |
+|------|------|
+| Enable Interface | ✅ |
+| Description | `PIVPN` |
+| Block private networks | ☐ |
+| Block bogon networks | ☐ |
+| IPv4 Configuration Type | `None` |
+| IPv6 Configuration Type | `None` |
+
+→ **Save** → **Apply changes**
 
 ---
 
-## Schritt 8 — Statische Route für Nebenwohnsitz-LAN
+## Schritt 7 — Firewall-Regel auf PIVPN-Interface
 
-**OPNsense → System → Routen → Statische Routen**
+**OPNsense → Firewall → Rules → PIVPN → [+] Add**
 
-| Netzwerk           | Gateway                                      |
-|-------------------|----------------------------------------------|
-| `10.10.0.0/24`    | WireGuard-Interface (nach Aktivierung wählbar)|
-| `192.168.20.0/24` | WireGuard-Interface                          |
+| Feld | Wert |
+|------|------|
+| Action | `Pass` |
+| Interface | `PIVPN` |
+| Direction | `in` |
+| TCP/IP Version | `IPv4` |
+| Protocol | `any` |
+| Source | `any` |
+| Destination | `any` |
+| Description | `VPN Traffic erlauben` |
+
+→ **Save** → **Apply Changes**
+
+> **Keine WAN-Regel nötig.** OPNsense baut die Verbindung selbst auf (outbound). Die Stateful Firewall lässt Return-Traffic automatisch durch.
+
+---
+
+## Schritt 8 — Raspi-Peer in wireguard-ui nachtragen
+
+Auf dem Raspi in wireguard-ui (`http://<raspi-ip>:5000`):
+
+**WireGuard Clients → + New Client**
+
+| Feld | Wert |
+|------|------|
+| Name | `OPNsense-Hauptwohnsitz` |
+| IP Allocation | `10.10.0.3/32` |
+| Allowed IPs | `10.10.0.0/24, 192.168.8.0/24` |
+| Public key | *(Public Key der OPNsense-Instance aus Schritt 2)* |
+| Pre-shared key | *(falls in OPNsense gesetzt — hier identisch eintragen)* |
+
+→ **Save** → **Apply Config**
 
 ---
 
 ## Verifikation
 
-```bash
-# Auf dem Raspi (nach dem Verbinden):
-ping 10.10.0.1          # OPNsense WireGuard-Interface
-ping 192.168.10.1       # OPNsense LAN-Gateway
+**In OPNsense → VPN → WireGuard → Status:**
+- Instance `PIVPN` muss erscheinen
+- Peer `Raspi-Nebenwohnsitz` sollte `latest handshake: X seconds ago` zeigen
 
-# In OPNsense → VPN → WireGuard → Status:
-# Peer nebenwohnsitz sollte "latest handshake: X seconds ago" zeigen
+**Auf dem Raspi:**
+```bash
+sudo wg show
+# Peer OPNsense sollte latest handshake und transfer zeigen
 ```
+
+**Ping-Test:**
+```bash
+# Vom Raspi → OPNsense VPN-IP:
+ping 10.10.0.3
+
+# Vom Raspi → Hauptwohnsitz LAN:
+ping 192.168.8.1
+```
+
+---
+
+## Bekannte Probleme
+
+| Problem | Ursache | Lösung |
+|---------|---------|--------|
+| Kein Handshake | Starlink blockiert eingehend | OPNsense verbindet outbound — Keepalive 25s sicherstellt Verbindung |
+| `vpn.rexxlab.uk` nicht auflösbar | DDNS nicht aktuell | ddns-go auf Raspi prüfen: `sudo docker logs ddns-go` |
+| Traffic kommt nicht an | iptables auf Raspi fehlen | Post Up Script in wireguard-ui prüfen |
+| OPNsense zeigt keine DDNS-Option | DDNS-Plugin nicht in OPNsense | Korrekt — DDNS läuft auf dem Raspi via ddns-go |

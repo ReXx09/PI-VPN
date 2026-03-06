@@ -11,23 +11,36 @@
 │   Starlink-Dish                              Vodafone Kabel                        │
 │   (CGNAT IPv4,                               (DS-Lite IPv4,                        │
 │    IPv6 nativ)                                IPv6 nativ)                          │
+│   ⚠️ Blockiert eingehende                         │                               │
+│      IPv6-Verbindungen!                     Fritzbox 6660                          │
+│        │                                    WAN: 2a0d:3344:…/64                   │
+│   OPNsense Router                           LAN: 192.168.20.0/24                  │
+│   LAN: 192.168.8.0/24                             │                               │
+│   VPN:  10.10.0.3/24                        Raspberry Pi (EINZIGER RASPI)          │
+│   Rolle: WireGuard CLIENT                   LAN: 192.168.20.x                     │
+│        │                                    IPv6: 2a0d:3344:1511:8400::…          │
+│        │                                    VPN:  10.10.0.1/24                    │
+│        │                                    Rolle: WireGuard SERVER               │
+│        │                                    [wireguard-ui :5000]                  │
+│        │                                    [ddns-go      :9876]                  │
 │        │                                           │                               │
-│   OPNsense Router                           Fritzbox 6660                          │
-│   WAN: 2001:db8:A::/64                      WAN: 2001:db8:B::/64                  │
-│   LAN: 192.168.10.0/24                      LAN: 192.168.20.0/24                  │
-│        │                                           │                               │
-│   ─────┼─────────────────────────────────────────┼──                              │
-│        │                                           │                               │
-│   Raspberry Pi #1 (Server)                  Raspberry Pi #2 (Client)              │
-│   LAN: 192.168.10.50                        LAN: 192.168.20.50                    │
-│   IPv6: 2001:db8:A::50   ◄══WG-Tunnel══►   IPv6: 2001:db8:B::50                 │
-│   VPN:  10.10.0.1/24       UDP 51820         VPN:  10.10.0.2/24                  │
-│                             via IPv6                                               │
-│   [wireguard-ui :5000]                      [wireguard-client]                    │
-│   [ddns-go      :9876]                      [ddns-go :9876]                       │
+│        └──────────── WG-Tunnel ══════════════════►│                               │
+│                      OPNsense verbindet outbound   │                               │
+│                      via vpn.rexxlab.uk:51820      │                               │
+│                      UDP 51820, IPv6               │                               │
+│                                                                                    │
+│   Thomas-Handy (Client)                                                            │
+│   VPN: 10.10.0.2/32          ─────────────────────┘                              │
+│   Allowed: 10.10.0.0/24, 192.168.8.0/24                                           │
 │                                                                                    │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Warum OPNsense Client statt Server?**
+> Starlink blockiert eingehende IPv6-Verbindungen (UDP 51820).
+> OPNsense verbindet deshalb aktiv *outbound* zum Raspi am Nebenwohnsitz —
+> ausgehende Verbindungen werden von Starlink nicht blockiert.
+> Der Raspi (Nebenwohnsitz) hat über Vodafone/Fritzbox eine öffentlich erreichbare IPv6.
 
 ---
 
@@ -35,28 +48,27 @@
 
 ### VPN-Subnetz (WireGuard-Tunnel)
 
-| Rolle              | Hostname               | VPN-IP     |
-|--------------------|------------------------|------------|
-| Server (Haupt.)    | wg-server              | 10.10.0.1  |
-| Client (Neben.)    | wg-nebenwohnsitz       | 10.10.0.2  |
-| (Reserve)          | weitere Clients/Geräte | 10.10.0.3+ |
+| Rolle                    | Gerät               | VPN-IP        |
+|--------------------------|---------------------|---------------|
+| **Server**               | Raspi (Nebenwohns.) | `10.10.0.1/24`|
+| Client — Handy           | Thomas-Handy        | `10.10.0.2/32`|
+| Client — Router          | OPNsense (Hauptwohns.) | `10.10.0.3/24`|
 
 ### Heimnetze (LAN)
 
-| Standort       | Subnetz              | Router-IP      | Raspi-IP          |
-|----------------|----------------------|----------------|-------------------|
-| Hauptwohnsitz  | 192.168.10.0/24      | 192.168.10.1   | 192.168.10.50     |
-| Nebenwohnsitz  | 192.168.20.0/24      | 192.168.20.1   | 192.168.20.50     |
+| Standort       | Subnetz              | Router/Gateway    |
+|----------------|----------------------|-------------------|
+| Hauptwohnsitz  | `192.168.8.0/24`     | `192.168.8.1` (OPNsense) |
+| Nebenwohnsitz  | `192.168.20.0/24`    | `192.168.20.1` (Fritzbox) |
 
-> **Hinweis:** Passe diese Adressen an dein tatsächliches Heimnetz an.  
-> OPNsense nutzt oft `192.168.1.0/24`, Fritzbox `192.168.178.0/24`.
+### DDNS-Hostname
 
-### DDNS-Hostnamen
+| Hostname         | Record | Wert                          | Pflegt           |
+|------------------|--------|-------------------------------|------------------|
+| `vpn.rexxlab.uk` | `AAAA` | `2a0d:3344:1511:8400::…`     | ddns-go (Raspi)  |
 
-| Standort       | DDNS-Hostname              | Record-Typ | Aktualisiert durch |
-|----------------|----------------------------|------------|--------------------|
-| Hauptwohnsitz  | `vpn-home.deine-domain.de` | AAAA       | ddns-go (Raspi #1) |
-| Nebenwohnsitz  | `vpn-neben.deine-domain.de`| AAAA       | ddns-go (Raspi #2) |
+> **Wichtig:** Kein A-Record! Starlink vergibt nur CGNAT-IPv4 (`145.224.73.8`) —
+> von außen nicht erreichbar. Der A-Record in ddns-go muss **deaktiviert** sein.
 
 ---
 
@@ -64,9 +76,9 @@
 
 | Dienst         | Port  | Protokoll | Standort        | Erreichbar von         |
 |----------------|-------|-----------|-----------------|------------------------|
-| WireGuard      | 51820 | UDP       | Hauptwohnsitz   | Internet (IPv6)        |
-| wireguard-ui   | 5000  | TCP       | Hauptwohnsitz   | LAN (nur intern)       |
-| ddns-go WebUI  | 9876  | TCP       | beide           | LAN (nur intern)       |
+| WireGuard      | 51820 | UDP       | **Nebenwohnsitz** (Raspi) | Internet (IPv6) |
+| wireguard-ui   | 5000  | TCP       | Nebenwohnsitz   | LAN (nur intern)       |
+| ddns-go WebUI  | 9876  | TCP       | Nebenwohnsitz   | LAN (nur intern)       |
 
 > **Sicherheit:** wireguard-ui und ddns-go niemals direkt ins Internet freigeben!
 
@@ -78,26 +90,27 @@
 
 ```
 IPv4-Situation:
-  Starlink → CGNAT → OPNsense → Raspi
-             ↑ Kein öffentliches IPv4!
-             Portforwarding von außen nicht möglich.
+  Starlink → CGNAT → OPNsense
+             ↑ Kein öffentliches IPv4! Kein Portforwarding möglich.
 
   Vodafone Kabel → DS-Lite CGN → Fritzbox → Raspi
                    ↑ Ebenfalls kein öffentliches IPv4!
 
 IPv6-Situation:
-  Starlink → öffentliches /56 Prefix → OPNsense → Raspi bekommt globale IPv6
-  Vodafone → öffentliches /60 Prefix → Fritzbox → Raspi bekommt globale IPv6
-                                 ↑ DIREKT erreichbar!
+  Starlink → öffentl. /56 Prefix → OPNsense bekommt globale IPv6
+             ABER: Starlink blockiert eingehende UDP (z. B. Port 51820)!
+             → OPNsense MUSS als Client (outbound) verbinden.
+
+  Vodafone → öffentl. /60 Prefix → Fritzbox → Raspi bekommt globale IPv6
+             Fritzbox leitet UDP 51820 direkt zum Raspi → DIREKT erreichbar!
 ```
 
 ### DDNS-Go — Warum zwingend?
 
-IPv6-Prefixes von Starlink und Vodafone sind **dynamisch** — sie wechseln regelmäßig.
-ddns-go überwacht das Interface und aktualisiert den DNS-AAAA-Record sofort bei Änderung.
+IPv6-Prefixes von Vodafone sind **dynamisch** — sie wechseln täglich.
+ddns-go auf dem Raspi überwacht `eth0` und aktualisiert den AAAA-Record bei Änderung sofort.
 
-WireGuard löst den DNS-Namen beim Start auf. Ändert sich die IP, muss der Tunnel
-neu gestartet werden (ddns-go kann via Webhook oder Cron den Neustart triggern).
+OPNsense löst `vpn.rexxlab.uk` beim Verbindungsaufbau auf und verbindet direkt zur aktuellen IPv6.
 
 ---
 

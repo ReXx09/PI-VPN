@@ -130,13 +130,14 @@ main_menu_whiptail() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Zentrales Menue  |  $(hostname)" \
             --menu "${STATUS_LINE}\n\nWähle eine Kategorie:" \
-            22 84 8 \
+            24 84 9 \
             "1" "  🔧  Setup & Installation" \
             "2" "  📊  Status & Monitoring" \
             "3" "  🐳  Container-Verwaltung" \
             "4" "  ⚙️  Konfiguration & Updates" \
             "5" "  🔄  Reset & Deinstallation" \
             "6" "  🌐  WebUI-Adressen anzeigen" \
+            "7" "  🔬  Diagnose & Tools" \
             "0" "  ❌  Beenden" \
             3>&1 1>&2 2>&3) || break
 
@@ -147,6 +148,7 @@ main_menu_whiptail() {
             4) menu_config_wt ;;
             5) menu_reset_wt ;;
             6) show_webui_addresses_wt ;;
+            7) menu_diag_wt ;;
             0|"") break ;;
         esac
     done
@@ -457,6 +459,194 @@ show_webui_addresses_wt() {
         18 64
 }
 
+# ─── Untermenü: Diagnose & Tools ─────────────────────────────────────────────
+menu_diag_wt() {
+    while true; do
+        local CHOICE
+        CHOICE=$(whiptail \
+            --title "PI-VPN | Diagnose & Tools" \
+            --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
+            22 72 9 \
+            "1" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
+            "2" "  WireGuard Handshake prüfen" \
+            "3" "  DNS-Auflösung testen  (vpn.rexxlab.uk)" \
+            "4" "  Ping VPN-Gateway  (10.10.0.1)" \
+            "5" "  Ping Heimnetz-Gateway  (192.168.8.1)" \
+            "6" "  IPv6-Adresse prüfen" \
+            "7" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
+            "8" "  Alle Tests auf einmal" \
+            "0" "  ← Zurück zum Hauptmenü" \
+            3>&1 1>&2 2>&3) || return
+
+        case "$CHOICE" in
+            1)
+                clear
+                echo -e "${BOLD}Tools installieren…${NC}\n"
+                local TO_INSTALL=""
+                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
+                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
+                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
+                if [[ -z "$TO_INSTALL" ]]; then
+                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert:${NC}"
+                    echo -e "     tcpdump $(tcpdump --version 2>&1 | head -1)"
+                    echo -e "     dig     $(dig -v 2>&1 | head -1)"
+                    echo -e "     nmap    $(nmap --version 2>&1 | head -1)"
+                else
+                    echo -e "  Installiere:${YELLOW}$TO_INSTALL${NC}\n"
+                    apt-get install -y $TO_INSTALL \
+                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
+                        || echo -e "\n  ${RED}✘  Fehler bei der Installation${NC}"
+                fi
+                press_enter
+                ;;
+            2)
+                clear
+                echo -e "${BOLD}WireGuard Handshake-Status:${NC}\n"
+                if ! ip link show wg0 &>/dev/null; then
+                    echo -e "  ${RED}✘  wg0-Interface nicht aktiv.${NC}"
+                    echo -e "  ${DIM}→ Container starten: Menu 3 → Alle Container starten${NC}"
+                else
+                    wg show wg0 2>/dev/null
+                    echo ""
+                    local HS
+                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    if [[ -n "$HS" && "$HS" != "0" ]]; then
+                        local AGO=$(( $(date +%s) - HS ))
+                        echo -e "  ${GREEN}✔  Letzter Handshake vor ${AGO}s${NC}"
+                        [[ $AGO -gt 180 ]] && echo -e "  ${YELLOW}⚠  Handshake älter als 3 Minuten — Verbindung möglicherweise unterbrochen${NC}"
+                    else
+                        echo -e "  ${RED}✘  Kein Handshake — Gegenstelle nicht verbunden${NC}"
+                        echo -e "  ${DIM}→ Prüfe: Endpoint, Firewall, Port 51820${NC}"
+                    fi
+                fi
+                press_enter
+                ;;
+            3)
+                clear
+                echo -e "${BOLD}DNS-Auflösung: vpn.rexxlab.uk${NC}\n"
+                if ! command -v dig &>/dev/null; then
+                    echo -e "  ${YELLOW}⚠  'dig' nicht installiert → Option 1 wählen${NC}"
+                else
+                    echo -e "  ${CYAN}A-Record (IPv4):${NC}"
+                    dig vpn.rexxlab.uk A +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    echo ""
+                    echo -e "  ${CYAN}AAAA-Record (IPv6):${NC}"
+                    dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    echo ""
+                    echo -e "  ${CYAN}Aktuelle IPv6 dieses Raspi:${NC}"
+                    ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}' || echo "    (nicht ermittelbar)"
+                fi
+                press_enter
+                ;;
+            4)
+                clear
+                echo -e "${BOLD}Ping VPN-Gateway (10.10.0.1):${NC}\n"
+                if ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 10.10.0.1 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  VPN-Gateway erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  VPN-Gateway nicht erreichbar — kein Tunnel?${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
+                fi
+                press_enter
+                ;;
+            5)
+                clear
+                echo -e "${BOLD}Ping Heimnetz-Gateway (192.168.8.1):${NC}\n"
+                if ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 192.168.8.1 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Hauptwohnsitz-Gateway erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar — Routing oder iptables-Regeln prüfen${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
+                fi
+                press_enter
+                ;;
+            6)
+                clear
+                echo -e "${BOLD}IPv6-Adresse dieses Raspi:${NC}\n"
+                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | while read -r line; do
+                    echo "  $line"
+                done
+                echo ""
+                echo -e "  ${CYAN}Öffentliche IPv6 (extern):${NC}"
+                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' \
+                    || echo -e "    ${YELLOW}⚠  Kein IPv6-Internet erreichbar${NC}"
+                echo ""
+                echo -e "  ${CYAN}AAAA in DNS (vpn.rexxlab.uk):${NC}"
+                if command -v dig &>/dev/null; then
+                    dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (nicht auflösbar)"
+                else
+                    echo -e "    ${DIM}dig nicht installiert → Option 1${NC}"
+                fi
+                press_enter
+                ;;
+            7)
+                clear
+                if ! command -v tcpdump &>/dev/null; then
+                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert.${NC}"
+                    echo -e "  ${DIM}→ Option 1 wählen um Tools zu installieren${NC}"
+                else
+                    echo -e "${BOLD}tcpdump — lausche auf UDP Port 51820 (eth0)${NC}"
+                    echo -e "${DIM}Aktiviere jetzt WireGuard auf dem Gegenstück. Ctrl+C zum Beenden.${NC}\n"
+                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
+                fi
+                press_enter
+                ;;
+            8)
+                clear
+                echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
+                # 1. wg show
+                echo -e "${CYAN}[1/4] WireGuard Status:${NC}"
+                if ip link show wg0 &>/dev/null; then
+                    wg show wg0 2>/dev/null
+                    local HS
+                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    if [[ -n "$HS" && "$HS" != "0" ]]; then
+                        local AGO=$(( $(date +%s) - HS ))
+                        echo -e "  ${GREEN}✔  Handshake vor ${AGO}s${NC}"
+                    else
+                        echo -e "  ${RED}✘  Kein Handshake${NC}"
+                    fi
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
+                echo ""
+                # 2. DNS
+                echo -e "${CYAN}[2/4] DNS (vpn.rexxlab.uk):${NC}"
+                if command -v dig &>/dev/null; then
+                    local A AAAA
+                    A=$(dig vpn.rexxlab.uk A +short 2>/dev/null)
+                    AAAA=$(dig vpn.rexxlab.uk AAAA +short 2>/dev/null)
+                    [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
+                    [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
+                else
+                    echo -e "  ${DIM}dig nicht installiert → Option 1${NC}"
+                fi
+                echo ""
+                # 3. Ping-Tests
+                echo -e "${CYAN}[3/4] Erreichbarkeit:${NC}"
+                if ip link show wg0 &>/dev/null; then
+                    ping -c 2 -W 1 10.10.0.1  &>/dev/null && echo -e "  VPN-GW 10.10.0.1:   ${GREEN}✔ erreichbar${NC}" || echo -e "  VPN-GW 10.10.0.1:   ${RED}✘ nicht erreichbar${NC}"
+                    ping -c 2 -W 1 192.168.8.1 &>/dev/null && echo -e "  HW-GW 192.168.8.1:  ${GREEN}✔ erreichbar${NC}" || echo -e "  HW-GW 192.168.8.1:  ${RED}✘ nicht erreichbar${NC}"
+                else
+                    echo -e "  ${DIM}wg0 nicht aktiv — Pings übersprungen${NC}"
+                fi
+                echo ""
+                # 4. IPv6
+                echo -e "${CYAN}[4/4] IPv6:${NC}"
+                local MY_IPV6
+                MY_IPV6=$(curl -6 -s --max-time 5 ifconfig.co 2>/dev/null)
+                [[ -n "$MY_IPV6" ]] && echo -e "  Öffentlich: ${GREEN}$MY_IPV6${NC}" || echo -e "  Öffentlich: ${RED}nicht erreichbar${NC}"
+                echo ""
+                echo -e "${BOLD}═══ Report Ende ═══${NC}"
+                press_enter
+                ;;
+            0|"") return ;;
+        esac
+    done
+}
+
 # =============================================================================
 # TEXT-FALLBACK — einfaches Textmenü (ohne whiptail)
 # =============================================================================
@@ -491,6 +681,7 @@ main_menu_text() {
         echo -e "  ${BOLD}[4]${NC}  ⚙️  Konfiguration & Updates"
         echo -e "  ${BOLD}[5]${NC}  🔄  Reset & Deinstallation"
         echo -e "  ${BOLD}[6]${NC}  🌐  WebUI-Adressen anzeigen"
+        echo -e "  ${BOLD}[7]${NC}  🔬  Diagnose & Tools"
         blank
         divider_text
         echo -e "  ${BOLD}[0]${NC}  Beenden"
@@ -509,6 +700,7 @@ main_menu_text() {
                 echo -e "  ${BOLD}ddns-go:${NC}       http://$(raspi_ip):9876"
                 press_enter
                 ;;
+            7) text_diag ;;
             0|q|Q|exit|quit) break ;;
             *) echo -e "  ${RED}Ungültige Auswahl.${NC}"; sleep 1 ;;
         esac
@@ -629,6 +821,147 @@ text_config() {
                 free -h | grep Mem | awk '{printf "  \033[0;36mSpeicher:\033[0m  %s gesamt  %s frei\n", $2, $4}'
                 df -h / | tail -1 | awk '{printf "  \033[0;36mDisk /:\033[0m    %s gesamt  %s frei (%s)\n", $2, $4, $5}'
                 echo -e "  ${CYAN}Docker:${NC}    $(docker --version 2>/dev/null || echo 'nicht inst.')"
+                press_enter
+                ;;
+            0|"") return ;;
+        esac
+    done
+}
+
+text_diag() {
+    while true; do
+        clear; blank
+        echo -e "  ${BOLD}[DIAGNOSE] Diagnose & Tools${NC}"; blank
+        echo -e "  ${BOLD}[1]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
+        echo -e "  ${BOLD}[2]${NC}  WireGuard Handshake prüfen"
+        echo -e "  ${BOLD}[3]${NC}  DNS-Auflösung testen  (vpn.rexxlab.uk)"
+        echo -e "  ${BOLD}[4]${NC}  Ping VPN-Gateway  (10.10.0.1)"
+        echo -e "  ${BOLD}[5]${NC}  Ping Heimnetz-Gateway  (192.168.8.1)"
+        echo -e "  ${BOLD}[6]${NC}  IPv6-Adresse prüfen"
+        echo -e "  ${BOLD}[7]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
+        echo -e "  ${BOLD}[8]${NC}  Alle Tests auf einmal"
+        blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
+        blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
+        read -r C
+        case "$C" in
+            1)
+                clear
+                echo -e "${BOLD}Tools installieren…${NC}\n"
+                local TO_INSTALL=""
+                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
+                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
+                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
+                if [[ -z "$TO_INSTALL" ]]; then
+                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert${NC}"
+                else
+                    apt-get install -y $TO_INSTALL \
+                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
+                        || echo -e "\n  ${RED}✘  Fehler${NC}"
+                fi
+                press_enter
+                ;;
+            2)
+                clear
+                echo -e "${BOLD}WireGuard Handshake:${NC}\n"
+                if ip link show wg0 &>/dev/null; then
+                    wg show wg0 2>/dev/null
+                    local HS
+                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    if [[ -n "$HS" && "$HS" != "0" ]]; then
+                        local AGO=$(( $(date +%s) - HS ))
+                        echo -e "\n  ${GREEN}✔  Handshake vor ${AGO}s${NC}"
+                    else
+                        echo -e "\n  ${RED}✘  Kein Handshake${NC}"
+                    fi
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
+                press_enter
+                ;;
+            3)
+                clear
+                echo -e "${BOLD}DNS: vpn.rexxlab.uk${NC}\n"
+                if command -v dig &>/dev/null; then
+                    echo -e "  ${CYAN}A-Record:${NC}";    dig vpn.rexxlab.uk A    +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}AAAA-Record:${NC}"; dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}Raspi IPv6:${NC}";  ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}'
+                else
+                    echo -e "  ${YELLOW}⚠  dig nicht installiert → Option 1${NC}"
+                fi
+                press_enter
+                ;;
+            4)
+                clear
+                echo -e "${BOLD}Ping 10.10.0.1 (VPN-Gateway):${NC}\n"
+                ip link show wg0 &>/dev/null \
+                    && { ping -c 4 -W 2 10.10.0.1 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar${NC}"; } \
+                    || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                press_enter
+                ;;
+            5)
+                clear
+                echo -e "${BOLD}Ping 192.168.8.1 (Hauptwohnsitz):${NC}\n"
+                ip link show wg0 &>/dev/null \
+                    && { ping -c 4 -W 2 192.168.8.1 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar — iptables prüfen${NC}"; } \
+                    || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                press_enter
+                ;;
+            6)
+                clear
+                echo -e "${BOLD}IPv6-Adresse:${NC}\n"
+                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | sed 's/^/  /'
+                echo -e "\n  ${CYAN}Öffentliche IPv6:${NC}"
+                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' || echo -e "    ${YELLOW}nicht erreichbar${NC}"
+                press_enter
+                ;;
+            7)
+                clear
+                if command -v tcpdump &>/dev/null; then
+                    echo -e "${BOLD}tcpdump UDP 51820 (Ctrl+C zum Beenden):${NC}\n"
+                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
+                else
+                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert → Option 1${NC}"
+                fi
+                press_enter
+                ;;
+            8)
+                clear
+                echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
+                echo -e "${CYAN}[1/4] WireGuard:${NC}"
+                if ip link show wg0 &>/dev/null; then
+                    wg show wg0 2>/dev/null
+                    local HS; HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    [[ -n "$HS" && "$HS" != "0" ]] \
+                        && echo -e "  ${GREEN}✔  Handshake vor $(( $(date +%s) - HS ))s${NC}" \
+                        || echo -e "  ${RED}✘  Kein Handshake${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
+                echo -e "\n${CYAN}[2/4] DNS:${NC}"
+                if command -v dig &>/dev/null; then
+                    local A AAAA
+                    A=$(dig vpn.rexxlab.uk A +short 2>/dev/null)
+                    AAAA=$(dig vpn.rexxlab.uk AAAA +short 2>/dev/null)
+                    [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
+                    [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
+                else
+                    echo -e "  ${DIM}dig nicht installiert${NC}"
+                fi
+                echo -e "\n${CYAN}[3/4] Erreichbarkeit:${NC}"
+                if ip link show wg0 &>/dev/null; then
+                    ping -c 2 -W 1 10.10.0.1  &>/dev/null && echo -e "  10.10.0.1:   ${GREEN}✔${NC}" || echo -e "  10.10.0.1:   ${RED}✘${NC}"
+                    ping -c 2 -W 1 192.168.8.1 &>/dev/null && echo -e "  192.168.8.1: ${GREEN}✔${NC}" || echo -e "  192.168.8.1: ${RED}✘${NC}"
+                else
+                    echo -e "  ${DIM}wg0 nicht aktiv — übersprungen${NC}"
+                fi
+                echo -e "\n${CYAN}[4/4] IPv6:${NC}"
+                local MY_IPV6; MY_IPV6=$(curl -6 -s --max-time 5 ifconfig.co 2>/dev/null)
+                [[ -n "$MY_IPV6" ]] && echo -e "  ${GREEN}$MY_IPV6${NC}" || echo -e "  ${RED}nicht erreichbar${NC}"
+                echo -e "\n${BOLD}═══ Report Ende ═══${NC}"
                 press_enter
                 ;;
             0|"") return ;;

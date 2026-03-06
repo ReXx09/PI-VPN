@@ -4,10 +4,14 @@
 Nebenwohnsitz (Vodafone Kabel + Fritzbox 6660) über IPv6.
 
 ```
-OPNsense (Hauptwohnsitz)  ◄══ WireGuard Tunnel (IPv6) ══►  Raspberry Pi (Nebenwohnsitz)
-WireGuard-Server nativ                                        wireguard-ui + ddns-go
-10.10.0.1                                                     10.10.0.2
+OPNsense (Hauptwohnsitz)  ══ WireGuard Tunnel (IPv6) ══►  Raspberry Pi (Nebenwohnsitz)
+WireGuard-CLIENT                                            WireGuard-SERVER (wireguard-ui + ddns-go)
+10.10.0.3/24              outbound zu vpn.rexxlab.uk        10.10.0.1/24
 ```
+
+> **Warum OPNsense Client?** Starlink blockiert eingehende IPv6-Verbindungen (UDP 51820).
+> OPNsense verbindet deshalb aktiv *outbound* zum Raspi — das wird von Starlink nicht blockiert.
+> Die öffentlich erreichbare IPv6 liegt am Nebenwohnsitz (Vodafone + Fritzbox 6660).
 
 ---
 
@@ -21,11 +25,11 @@ WireGuard-Server nativ                                        wireguard-ui + ddn
 - [Überblick](#überblick-was-wird-wo-eingerichtet)
 - **[Teil A — Hauptwohnsitz: OPNsense](#teil-a--hauptwohnsitz-opnsense-einrichten)**
   - [A1 — WireGuard-Plugin installieren](#a1--wireguard-plugin-installieren)
-  - [A2 — Dynamisches DNS (AAAA)](#a2--dynamisches-dns-aaaa-einrichten)
-  - [A3 — WireGuard-Server konfigurieren](#a3--wireguard-server-konfigurieren)
-  - [A4 — Firewall-Regel UDP 51820](#a4--firewall-regel-wan--udp-51820)
-  - [A5 — WireGuard aktivieren](#a5--wireguard-aktivieren)
-  - [A6 — Peer vorbereiten](#a6--peer-nebenwohnsitz-vorbereiten)
+  - [A2 — WireGuard Instance anlegen (Client)](#a2--wireguard-instance-anlegen-client)
+  - [A3 — Peer (Raspi) anlegen](#a3--peer-raspi-anlegen)
+  - [A4 — WireGuard aktivieren](#a4--wireguard-aktivieren)
+  - [A5 — Interface zuweisen](#a5--interface-zuweisen)
+  - [A6 — Firewall-Regel PIVPN](#a6--firewall-regel-auf-pivpn-interface)
   - [A7 — Statische Routen](#a7--statische-routen-für-das-nebenwohnsitz-lan)
 - **[Teil B — Nebenwohnsitz: Raspberry Pi](#teil-b--nebenwohnsitz-raspberry-pi-einrichten)**
   - [B1 — Raspberry Pi OS installieren](#b1--raspberry-pi-os-installieren)
@@ -57,9 +61,9 @@ WireGuard-Server nativ                                        wireguard-ui + ddn
 
 | Standort       | Gerät          | Was                                          |
 |----------------|----------------|----------------------------------------------|
-| Hauptwohnsitz  | OPNsense       | WireGuard-Plugin, Dynamisches DNS (AAAA)     |
+| Hauptwohnsitz  | OPNsense       | WireGuard-Plugin (Client-Modus)              |
 | Hauptwohnsitz  | Fritzbox/Router| –– (OPNsense übernimmt alles)                |
-| Nebenwohnsitz  | Raspberry Pi   | Docker, wireguard-ui, ddns-go                |
+| Nebenwohnsitz  | Raspberry Pi   | Docker, wireguard-ui (Server), ddns-go       |
 | Nebenwohnsitz  | Fritzbox 6660  | IPv6 aktivieren, UDP 51820 freigeben         |
 
 ---
@@ -68,100 +72,92 @@ WireGuard-Server nativ                                        wireguard-ui + ddn
 
 > Detaillierte OPNsense-Anleitung: [OPNsense-WireGuard.md](OPNsense-WireGuard.md)
 
+OPNsense wird als **WireGuard-Client** konfiguriert — es verbindet sich aktiv nach außen
+zum Raspi am Nebenwohnsitz. Kein DDNS und keine WAN-Firewall-Regel an der OPNsense nötig.
+
 ### A1 — WireGuard-Plugin installieren
 
-1. OPNsense-WebUI öffnen (z. B. `https://192.168.10.1`)
+1. OPNsense-WebUI öffnen (z. B. `https://192.168.8.1`)
 2. **System → Plugins**
 3. `os-wireguard` suchen → **[+]** klicken → installieren
 4. OPNsense neu starten
 
-### A2 — Dynamisches DNS (AAAA) einrichten
+### A2 — WireGuard Instance anlegen (Client)
 
-Starlink vergibt ein dynamisches IPv6-Prefix → DDNS sorgt dafür, dass der
-Raspberry Pi am Nebenwohnsitz immer den aktuellen Hostnamen auflösen kann.
+1. **VPN → WireGuard → Instances → [+] Add**
 
-1. **Dienste → Dynamisches DNS → [+] Hinzufügen**
+   | Feld             | Wert                                        |
+   |-----------------|---------------------------------------------|
+   | Enabled         | ✅                                          |
+   | Name            | `PIVPN`                                     |
+   | Tunnel address  | `10.10.0.3/24`                              |
+   | Listen port     | *(leer — OPNsense ist Client)*              |
+   | MTU             | `1420`                                      |
+   | DNS servers     | `192.168.8.1` *(OPNsense LAN-Gateway)*      |
 
-   | Feld        | Wert                                           |
-   |-------------|------------------------------------------------|
-   | Dienst      | Cloudflare                                     |
-   | Interface   | WAN                                            |
-   | Hostname    | `vpn-home.deine-domain.de`                     |
-   | Token       | Cloudflare API-Token (DNS:Edit-Berechtigung)   |
-   | Protokoll   | **IPv6 (AAAA)**                                |
-   | Intervall   | 5 Minuten                                      |
+   → **Schlüsselpaar generieren** (Zahnrad-Symbol) → **Save**
 
-2. **Speichern** → **„Einmalig aktualisieren"** klicken
+   > Den generierten **OPNsense Public Key** notieren — er muss später in wireguard-ui als Peer eingetragen werden.
 
-3. Testen (von einem Gerät im Heimnetz oder online):
-   ```
-   nslookup -type=AAAA vpn-home.deine-domain.de
-   ```
-   → Eine IPv6-Adresse muss erscheinen, sonst weiter prüfen.
-
-> **Cloudflare Token erstellen:**
-> dash.cloudflare.com → Profil → API-Token → Token erstellen
-> → Vorlage „Zone DNS bearbeiten" → nur deine Zone auswählen → Token kopieren
-
-### A3 — WireGuard-Server konfigurieren
-
-1. **VPN → WireGuard → Lokal → [+] Hinzufügen**
-
-   | Feld             | Wert          |
-   |-----------------|---------------|
-   | Name            | `wg-server`   |
-   | Listen-Port     | `51820`       |
-   | Tunnel-Adressen | `10.10.0.1/24`|
-   | MTU             | `1280`        |
-
-   → **Speichern** (Schlüsselpaar wird automatisch generiert)
-
-2. Öffentlichen Schlüssel notieren:
-   **VPN → WireGuard → Lokal → wg-server** → Schlüssel anzeigen
-   → Dieser Public Key wird später am Raspberry Pi eingetragen
-
-### A4 — Firewall-Regel: WAN → UDP 51820
-
-1. **Firewall → Regeln → WAN → [+] Hinzufügen**
-
-   | Feld      | Wert         |
-   |-----------|--------------|
-   | Aktion    | Passieren    |
-   | Protokoll | UDP          |
-   | Ziel      | WAN-Adresse  |
-   | Port      | `51820`      |
-
-2. **Speichern & Anwenden**
-
-### A5 — WireGuard aktivieren
-
-**VPN → WireGuard → Allgemein → „WireGuard aktivieren" ✅ → Speichern & Anwenden**
-
-### A6 — Peer (Nebenwohnsitz) vorbereiten
+### A3 — Peer (Raspi) anlegen
 
 > ⚠️ Den Public Key des Raspi bekommst du erst nach dem Raspberry Pi Setup (Teil B).
-> Lege den Peer-Eintrag jetzt schon an — den Public Key trägst du danach ein.
+> Lege den Peer-Eintrag schon vor oder danach an.
 
-1. **VPN → WireGuard → Endpunkte → [+] Hinzufügen**
+1. **VPN → WireGuard → Peers → [+] Add**
 
-   | Feld             | Wert                              |
-   |-----------------|-----------------------------------|
-   | Name            | `nebenwohnsitz`                   |
-   | Öffentl. Schlüssel | (wird nach Teil B eingetragen) |
-   | Erlaubte IPs    | `10.10.0.2/32, 192.168.20.0/24`  |
-   | Keepalive       | `25`                              |
-   | Endpunkt-Host   | (leer — Client verbindet sich)    |
+   | Feld               | Wert                              |
+   |-------------------|-----------------------------------|
+   | Name              | `Raspi-Nebenwohnsitz`             |
+   | Public Key        | (Public Key aus `sudo wg show wg0 public-key` auf dem Raspi) |
+   | Allowed IPs       | `10.10.0.0/24, 192.168.20.0/24`  |
+   | Endpoint address  | `vpn.rexxlab.uk`                  |
+   | Endpoint port     | `51820`                           |
+   | Keepalive         | `25`                              |
 
-2. **Speichern**
+   → **Save**
+
+2. Zurück zu **Instances → PIVPN** → im Feld **Peers** den Raspi-Peer auswählen → **Save**
+
+### A4 — WireGuard aktivieren
+
+**VPN → WireGuard → General → „Enable WireGuard" ✅ → Save**
+
+### A5 — Interface zuweisen
+
+**Interfaces → Assignments** → neues Interface auf `wg1` → **Add** → Interface öffnen:
+
+| Feld                    | Wert   |
+|-------------------------|--------|
+| Enable Interface        | ✅     |
+| Description             | PIVPN  |
+| IPv4 Configuration Type | None   |
+| IPv6 Configuration Type | None   |
+
+→ **Save → Apply changes**
+
+### A6 — Firewall-Regel auf PIVPN-Interface
+
+**Firewall → Rules → PIVPN → [+] Add**
+
+| Feld      | Wert    |
+|-----------|---------|
+| Aktion    | Pass    |
+| Protokoll | any     |
+| Quelle    | any     |
+| Ziel      | any     |
+
+→ **Save & Apply**
+
+> **Keine WAN-Regel nötig!** OPNsense verbindet outbound (Stateful-Firewall lässt Antworten automatisch durch).
 
 ### A7 — Statische Routen für das Nebenwohnsitz-LAN
 
-**System → Routen → Statische Routen**
+**System → Routes → Configuration**
 
 | Netzwerk           | Gateway            |
 |--------------------|--------------------|
-| `10.10.0.0/24`    | WireGuard-Interface|
-| `192.168.20.0/24` | WireGuard-Interface|
+| `192.168.20.0/24` | PIVPN-Interface    |
 
 ---
 
@@ -292,11 +288,12 @@ Der Wizard hat alle Werte vorausgefüllt. Prüfe:
 
 | Feld          | Erwarteter Wert   |
 |---------------|-------------------|
-| Server Address| `10.10.0.2/24`    |
+| Server Address| `10.10.0.1/24`    |
 | Listen Port   | `51820`           |
 | MTU           | `1280`            |
-| DNS           | `10.10.0.1, 1.1.1.1` |
-| Post Up       | `iptables ... MASQUERADE` (vom Wizard generiert) |
+| DNS           | `1.1.1.1`         |
+| Post Up       | `iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE` |
+| Pre Down      | `iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE` |
 
 → **Save** klicken
 
@@ -308,21 +305,17 @@ Der Wizard hat alle Werte vorausgefüllt. Prüfe:
    | Feld              | Wert                                                      |
    |------------------|-----------------------------------------------------------|
    | Name             | `OPNsense-Hauptwohnsitz`                                  |
-   | Public Key       | Public Key aus OPNsense (Teil A3 notiert)                 |
-   | Allocated IPs    | `10.10.0.1/32`                                            |
-   | **Allowed IPs**  | Siehe unten (Split- oder Full-Tunnel wählen)              |
-   | Endpoint         | `vpn-home.deine-domain.de:51820`                          |
+   | Public Key       | Public Key aus OPNsense (Teil A2 notiert)                 |
+   | Allocated IPs    | `10.10.0.3/32`                                            |
+   | **Allowed IPs**  | `10.10.0.0/24, 192.168.8.0/24`                           |
+   | Endpoint         | *(leer — OPNsense verbindet sich aktiv zum Raspi)*        |
    | Keepalive        | `25`                                                      |
 
-3. **Allowed IPs — wähle deinen Tunnel-Modus:**
+   > **Allowed IPs** hier definiert, welche Subnetze OPNsense hinter dem Tunnel erreichbar macht:
+   > - `10.10.0.0/24` = VPN-Subnetz
+   > - `192.168.8.0/24` = Hauptwohnsitz-LAN (Starlink-Seite)
 
-   | Modus               | AllowedIPs                      | Wofür               |
-   |---------------------|---------------------------------|---------------------|
-   | **Split-Tunnel**    | `10.10.0.0/24, 192.168.10.0/24`| Nur Heimnetz erreichbar, Rest direkt über Vodafone |
-   | **Full-Tunnel**     | `0.0.0.0/0, ::/0`              | Alles durch den Tunnel → Streaming über Starlink-Anschluss |
-
-4. **Save** → **„Apply Config"** klicken
-   → WireGuard startet automatisch und verbindet sich
+3. **Save** → **„Apply Config"** klicken
 
 ### C3 — Tunnelstatus prüfen
 
@@ -330,7 +323,7 @@ In der WebUI: **„Wireguard Clients"** → Status-Symbol sollte grün werden
 
 Oder im Terminal:
 ```bash
-sudo docker exec wireguard-ui wg show
+sudo wg show wg0
 ```
 
 Erwartete Ausgabe:
@@ -340,7 +333,7 @@ interface: wg0
   ...
 
 peer: <OPNsense-Public-Key>
-  endpoint: [2001:db8:xxxx::1]:51820
+  endpoint: [2a0d:3344:xxxx::1]:51820
   latest handshake: 12 seconds ago    ← Verbindung aktiv!
   transfer: 1.23 MiB received, 456 KiB sent
 ```
@@ -450,12 +443,13 @@ Optional — nützlich wenn OPNsense Firewall-Regeln auf die Client-IPv6 setzen 
 
 ```bash
 # Auf dem Raspberry Pi:
-ping 10.10.0.1              # OPNsense WireGuard-Interface
-ping 192.168.10.1           # OPNsense LAN-Gateway (Hauptwohnsitz)
+sudo wg show wg0          # Handshake und Transfer prüfen
+ping 10.10.0.3            # OPNsense WireGuard-Interface (Hauptwohnsitz)
+ping 192.168.8.1          # OPNsense LAN-Gateway (Hauptwohnsitz)
 
 # Von einem Gerät am Nebenwohnsitz (wenn Fritzbox-Route gesetzt):
-ping 192.168.10.1           # Hauptwohnsitz-LAN
-ping 192.168.20.50          # Raspi selbst
+ping 192.168.8.1          # Hauptwohnsitz-LAN-Gateway
+ping 10.10.0.1            # Raspi VPN-Interface
 ```
 
 ### F2 — Streaming-Test (Full-Tunnel)
@@ -526,7 +520,7 @@ sudo bash /opt/pi-vpn/scripts/manage/reset.sh
 | ddns-go: „Need to complete username/password…" | Login-Zeitfenster abgelaufen | `sudo docker restart ddns-go` → sofort WebUI öffnen (Teil E1) |
 | Tunnel baut sich nicht auf           | Fritzbox-Portfreigabe fehlt          | Teil D2 erneut prüfen                                         |
 | „latest handshake" veraltet         | DDNS-Record outdated                 | ddns-go WebUI → „Einmalig aktualisieren"                      |
-| Tunnel aktiv aber kein LAN-Ping      | Route in OPNsense/Fritzbox fehlt     | Teil A7 bzw. D3 prüfen                                        |
+| Tunnel aktiv aber kein LAN-Ping      | Route in OPNsense/Fritzbox fehlt     | Teil A7 bzw. D3 prüfen; iptables Post Up auf Raspi prüfen |
 | wg0 startet nicht                    | iptables-Fehler (falsches Interface) | `LAN_IFACE` im Wizard prüfen: `ip link show`                  |
 | wireguard-ui startet nicht           | Port 5000 belegt                     | `sudo ss -tlnp \| grep 5000`                                  |
 | IPv6 nicht verfügbar                 | Fritzbox IPv6 deaktiviert            | Teil D1 → IPv6 aktivieren                                     |

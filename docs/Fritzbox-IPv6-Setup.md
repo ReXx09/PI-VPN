@@ -89,37 +89,42 @@ Damit alle Fritzbox-Geräte das Hauptwohnsitz-LAN erreichen (nicht nur Raspi-Ger
 
 | Feld         | Wert                                        |
 |--------------|---------------------------------------------|
-| IPv4-Netz    | `192.168.10.0` / `255.255.255.0`           |
-| Gateway      | `192.168.20.50` (LAN-IP des Raspi)         |
+| IPv4-Netz    | `192.168.8.0` / `255.255.255.0`             |
+| Gateway      | `192.168.20.x` (LAN-IP des Raspi im Fritzbox-Netz) |
 | Beschreibung | Hauptwohnsitz via WireGuard                 |
 
 | Feld         | Wert                                        |
 |--------------|---------------------------------------------|
-| IPv4-Netz    | `10.10.0.0` / `255.255.255.0`              |
-| Gateway      | `192.168.20.50`                             |
+| IPv4-Netz    | `10.10.0.0` / `255.255.255.0`               |
+| Gateway      | `192.168.20.x`                              |
 | Beschreibung | WireGuard VPN-Subnetz                       |
+
+> **Raspi LAN-IP ermitteln:** `hostname -I | awk '{print $1}'` auf dem Raspi ausführen.
 
 ---
 
 ## Schritt 6 — DDNS-Hostnamen testen
 
-Der Nebenwohnsitz-Raspi muss den DDNS-Hostnamen des Hauptwohnsitzes auflösen können:
+Der Nebenwohnsitz-Raspi muss den DDNS-Hostnamen des Nebenwohnsitzes auflösen können
+(der DDNS-Hostname zeigt auf den Raspi selbst — OPNsense löst ihn beim Verbinden auf):
 
 ```bash
 # Auf dem Nebenwohnsitz-Raspi:
-nslookup -type=AAAA vpn-home.deine-domain.de
-ping6 vpn-home.deine-domain.de
+dig AAAA vpn.rexxlab.uk +short
+ping6 vpn.rexxlab.uk
 ```
+
+→ Es muss eine **IPv6-Adresse** (`2a0d:...`) erscheinen.
 
 ---
 
 ## Bekannte Probleme bei Vodafone DS-Lite
 
-| Problem                              | Ursache                         | Lösung                              |
+| Problem                             | Ursache                         | Lösung                              |
 |-------------------------------------|---------------------------------|-------------------------------------|
 | IPv6-Prefix wechselt täglich        | Vodafone Prefix-Rotation        | ddns-go greift das neue Prefix auf  |
 | Kein IPv4-Portforwarding möglich    | DS-Lite CGN                     | Nur IPv6 verwenden (wie hier)       |
-| WireGuard verbindet sich nicht      | Fritzbox-Firewall               | Schritte 3+4 erneut prüfen         |
+| WireGuard verbindet sich nicht      | Fritzbox-Firewall               | Schritte 3+4 erneut prüfen          |
 | Raspi hat keine stabile IPv6        | Privacy Extensions aktiv        | Schritt 2 (use_tempaddr=0)          |
 
 ---
@@ -128,17 +133,17 @@ ping6 vpn-home.deine-domain.de
 
 ```bash
 # Auf dem Nebenwohnsitz-Raspi:
-sudo docker exec wireguard-client wg show
+sudo wg show wg0
 
 # Erwartete Ausgabe (Handshake und Traffic):
-# peer: <SERVER_PUBLIC_KEY>
-#   endpoint: [2001:db8:xxxx::1]:51820
+# peer: <OPNSENSE_PUBLIC_KEY>
+#   endpoint: [2a0d:3344:xxxx::1]:51820
 #   latest handshake: 12 seconds ago
 #   transfer: 1.23 MiB received, 456 KiB sent
 
-# Ping zum Server-VPN-Interface:
-ping 10.10.0.1
+# Ping zum OPNsense-VPN-Interface:
+ping 10.10.0.3
 
 # Ping in das Hauptwohnsitz-LAN:
-ping 192.168.10.1
+ping 192.168.8.1
 ```

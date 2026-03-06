@@ -41,15 +41,17 @@ wechselnder IPv6-Adresse (Starlink vergbt neue Präfixe) immer findet.
 ### Architektur im Überblick
 
 ```
-Hauptwohnsitz                          Nebenwohnsitz
-────────────────────────────           ─────────────────────────────────────
-OPNsense (WireGuard-Server)            Raspberry Pi (WireGuard-Client)
-  • os-wireguard Plugin                  • wireguard-ui (Docker, Port 5000)
-  • DDNS → Cloudflare AAAA               • ddns-go     (Docker, Port 9876)
-  • VPN-IP: 10.10.0.1                    • VPN-IP: 10.10.0.2
-  • LAN: 192.168.10.0/24                 • LAN: 192.168.20.0/24
+Nebenwohnsitz                          Hauptwohnsitz
+─────────────────────────────────────  ────────────────────────────
+Raspberry Pi (WireGuard-SERVER)        OPNsense (WireGuard-CLIENT)
+  • wireguard-ui (Docker, Port 5000)     • os-wireguard Plugin
+  • ddns-go     (Docker, Port 9876)      • VPN-IP: 10.10.0.3/24
+  • VPN-IP: 10.10.0.1/24                • LAN: 192.168.8.0/24
+  • LAN: 192.168.20.0/24
+  • DDNS → vpn.rexxlab.uk (AAAA)
 
-         ◄══ WireGuard Tunnel über IPv6 (MTU 1280, Keepalive 25s) ══►
+         ◄══ WireGuard Tunnel über IPv6 (MTU 1420, Keepalive 25s) ══►
+              OPNsense verbindet aktiv outbound (Starlink blockiert inbound!)
 ```
 
 ### Wofür eignet sich PI-VPN?
@@ -63,10 +65,10 @@ OPNsense (WireGuard-Server)            Raspberry Pi (WireGuard-Client)
 
 | Was                     | Anforderung                                                   |
 |-------------------------|---------------------------------------------------------------|
-| Hauptwohnsitz           | OPNsense ≥ 21.7 mit `os-wireguard`-Plugin                    |
+| Hauptwohnsitz           | OPNsense ≥ 21.7 mit `os-wireguard`-Plugin (Client-Modus)     |
 | Nebenwohnsitz           | Raspberry Pi 4 oder 5, Raspberry Pi OS Bookworm 64-bit        |
 | Internetzugang          | IPv6 an beiden Standorten (CGNAT/DS-Lite kein Problem)        |
-| DDNS                    | Cloudflare (empfohlen) oder anderer Anbieter mit AAAA-Support |
+| DDNS                    | Cloudflare (empfohlen) oder anderer Anbieter mit AAAA-Support — läuft auf dem Raspi via ddns-go |
 | GitHub-Zugang           | Fine-grained Token mit Read-Zugriff auf dieses Repo           |
 
 ---
@@ -75,29 +77,32 @@ OPNsense (WireGuard-Server)            Raspberry Pi (WireGuard-Client)
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│              HAUPTWOHNSITZ                           │
-│  Starlink (CGNAT, IPv6 nativ)                        │
-│       │                                              │
-│   OPNsense                                           │
-│   ├── WireGuard-Plugin (Server, Port 51820)          │
-│   ├── Dynamisches DNS → AAAA-Record (eingebaut)      │
-│   └── LAN 192.168.10.0/24    VPN-IP: 10.10.0.1      │
-│                                                      │
-│       ➜ KEIN Raspberry Pi am Hauptwohnsitz nötig!   │
-└─────────────────────┬────────────────────────────────┘
-                      │  WireGuard Tunnel
-                      │  über IPv6 (AAAA)
-                      │  (kein öffentl. IPv4 nötig!)
-┌─────────────────────┴────────────────────────────────┐
 │              NEBENWOHNSITZ                           │
 │  Vodafone Kabel (DS-Lite, IPv6 nativ)                │
 │       │                                              │
 │   Fritzbox 6660 → LAN 192.168.20.0/24               │
 │       │                                              │
 │   Raspberry Pi  ← EINZIGER RASPI                     │
-│   [wireguard-client]  VPN-IP: 10.10.0.2             │
-│   [ddns-go]           (optional)                     │
+│   [wireguard-ui — SERVER]  VPN-IP: 10.10.0.1         │
+│   [ddns-go]  → vpn.rexxlab.uk (AAAA)                │
+│                                                      │
+│       ⬆ WireGuard Tunnel über IPv6 (UDP 51820)      │
+│         OPNsense verbindet aktiv outbound            │
+└─────────────────────┬────────────────────────────────┘
+                      │
+┌─────────────────────┴────────────────────────────────┐
+│              HAUPTWOHNSITZ                           │
+│  Starlink (CGNAT IPv4, IPv6 nativ)                   │
+│  ⚠️ Blockiert eingehende IPv6 → OPNsense muss Client  │
+│       │                                              │
+│   OPNsense                                           │
+│   ├── WireGuard-Plugin (CLIENT, verbindet outbound)  │
+│   ├── KEIN eigenes DDNS (Services hat keinen Dienst) │
+│   └── LAN 192.168.8.0/24  VPN-IP: 10.10.0.3         │
+│                                                      │
+│   Thomas-Handy (WireGuard-Client, 10.10.0.2/32)     │
 └──────────────────────────────────────────────────────┘
+```
 ```
 
 ---
