@@ -166,16 +166,16 @@ LAST=$(sudo wg show wg0 latest-handshakes | awk '{print $2}')
 echo "Handshake vor $(( $(date +%s) - LAST )) Sekunden"
 
 # ── DNS-Auflösung testen ─────────────────────────────────────────────────────
-dig A    vpn.rexxlab.uk +short   # Sollte leer sein (kein A-Record!)
-dig AAAA vpn.rexxlab.uk +short   # Muss 2a0d:3344:... zurückgeben
+dig A    vpn.deine-domain.de +short   # Sollte leer sein (kein A-Record!)
+dig AAAA vpn.deine-domain.de +short   # Muss 2001:db8:... zurückgeben
 
 # ── Ping VPN-Gateway ─────────────────────────────────────────────────────────
 ping -c 4 10.10.0.1              # Raspi selbst (VPN-Interface)
 ping -c 4 10.10.0.3              # OPNsense (wenn verbunden)
 
 # ── Ping Heimnetz-Gateways ───────────────────────────────────────────────────
-ping -c 4 192.168.20.1           # Fritzbox (Nebenwohnsitz)
-ping -c 4 192.168.8.1            # OPNsense LAN (Hauptwohnsitz, nur via Tunnel)
+ping -c 4 <NEBEN-GW>             # Fritzbox (Nebenwohnsitz — Gateway eintragen)
+ping -c 4 <HAUPT-GW>             # OPNsense LAN (Hauptwohnsitz, nur via Tunnel)
 
 # ── IPv6-Adresse prüfen ──────────────────────────────────────────────────────
 ip -6 addr show eth0 | grep "scope global"   # Lokale IPv6 des Raspi
@@ -186,10 +186,10 @@ sudo tcpdump -i eth0 udp port 51820 -n       # Zeigt ein-/ausgehende WG-Pakete
 
 # ── Vollständiger Diagnose-Report ────────────────────────────────────────────
 echo "=== wg show ===" && sudo wg show wg0
-echo "=== DNS A ===" && dig A vpn.rexxlab.uk +short
-echo "=== DNS AAAA ===" && dig AAAA vpn.rexxlab.uk +short
-echo "=== Ping VPN-GW ===" && ping -c 2 10.10.0.1
-echo "=== Ping Fritzbox ===" && ping -c 2 192.168.20.1
+echo "=== DNS A ==" && dig A vpn.deine-domain.de +short
+echo "=== DNS AAAA ==" && dig AAAA vpn.deine-domain.de +short
+echo "=== Ping VPN-GW ==" && ping -c 2 10.10.0.1
+echo "=== Ping Fritzbox ==" && ping -c 2 <NEBEN-GW>
 echo "=== IPv6 lokal ===" && ip -6 addr show eth0 | grep "scope global"
 echo "=== IPv6 öffentlich ===" && curl -6 -s --max-time 5 ifconfig.co
 echo "=== IP-Forwarding ===" && sysctl net.ipv4.ip_forward
@@ -211,10 +211,10 @@ sudo wg show wg0 latest-handshakes
 sudo wg show wg0 transfer
 
 # Ping auf OPNsense WireGuard-Interface
-ping 10.10.0.1
+ping 10.10.0.3
 
-# Ping auf Hauptwohnsitz-LAN
-ping 192.168.10.1
+# Ping auf Hauptwohnsitz-LAN (wenn Tunnel aktiv)
+ping <HAUPT-GW>
 
 # Eigene öffentliche IP prüfen (Full-Tunnel: muss Starlink-IP sein)
 curl -s https://ifconfig.me

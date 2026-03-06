@@ -6,7 +6,7 @@ Nebenwohnsitz (Vodafone Kabel + Fritzbox 6660) über IPv6.
 ```
 OPNsense (Hauptwohnsitz)  ══ WireGuard Tunnel (IPv6) ══►  Raspberry Pi (Nebenwohnsitz)
 WireGuard-CLIENT                                            WireGuard-SERVER (wireguard-ui + ddns-go)
-10.10.0.3/24              outbound zu vpn.rexxlab.uk        10.10.0.1/24
+10.10.0.3/24              outbound zu vpn.deine-domain.de   10.10.0.1/24
 ```
 
 > **Warum OPNsense Client?** Starlink blockiert eingehende IPv6-Verbindungen (UDP 51820).
@@ -77,7 +77,7 @@ zum Raspi am Nebenwohnsitz. Kein DDNS und keine WAN-Firewall-Regel an der OPNsen
 
 ### A1 — WireGuard-Plugin installieren
 
-1. OPNsense-WebUI öffnen (z. B. `https://192.168.8.1`)
+1. OPNsense-WebUI öffnen (z. B. `https://<HAUPT-GW>`)
 2. **System → Plugins**
 3. `os-wireguard` suchen → **[+]** klicken → installieren
 4. OPNsense neu starten
@@ -93,7 +93,7 @@ zum Raspi am Nebenwohnsitz. Kein DDNS und keine WAN-Firewall-Regel an der OPNsen
    | Tunnel address  | `10.10.0.3/24`                              |
    | Listen port     | *(leer — OPNsense ist Client)*              |
    | MTU             | `1420`                                      |
-   | DNS servers     | `192.168.8.1` *(OPNsense LAN-Gateway)*      |
+   | DNS servers     | `<HAUPT-GW>` *(OPNsense LAN-Gateway)*        |
 
    → **Schlüsselpaar generieren** (Zahnrad-Symbol) → **Save**
 
@@ -110,8 +110,8 @@ zum Raspi am Nebenwohnsitz. Kein DDNS und keine WAN-Firewall-Regel an der OPNsen
    |-------------------|-----------------------------------|
    | Name              | `Raspi-Nebenwohnsitz`             |
    | Public Key        | (Public Key aus `sudo wg show wg0 public-key` auf dem Raspi) |
-   | Allowed IPs       | `10.10.0.0/24, 192.168.20.0/24`  |
-   | Endpoint address  | `vpn.rexxlab.uk`                  |
+   | Allowed IPs       | `10.10.0.0/24, <NEBEN-LAN>`      |
+   | Endpoint address  | `vpn.deine-domain.de`             |
    | Endpoint port     | `51820`                           |
    | Keepalive         | `25`                              |
 
@@ -157,7 +157,7 @@ zum Raspi am Nebenwohnsitz. Kein DDNS und keine WAN-Firewall-Regel an der OPNsen
 
 | Netzwerk           | Gateway            |
 |--------------------|--------------------|
-| `192.168.20.0/24` | PIVPN-Interface    |
+| `<NEBEN-LAN>` | PIVPN-Interface    |
 
 ---
 
@@ -256,7 +256,7 @@ Der Wizard führt dich interaktiv durch:
 | Tunnel-IP dieses Raspi   | `10.10.0.2/24`                              |
 | MTU                      | `1280`                                      |
 | DNS                      | `10.10.0.1,1.1.1.1`                         |
-| LAN-Subnetz              | `192.168.20.0/24`  (dein Fritzbox-LAN)     |
+| LAN-Subnetz              | `<NEBEN-LAN>`  (dein Fritzbox-LAN)         |
 | LAN-Interface            | `eth0`                                      |
 | DDNS einrichten?         | `j`                                         |
 
@@ -307,13 +307,13 @@ Der Wizard hat alle Werte vorausgefüllt. Prüfe:
    | Name             | `OPNsense-Hauptwohnsitz`                                  |
    | Public Key       | Public Key aus OPNsense (Teil A2 notiert)                 |
    | Allocated IPs    | `10.10.0.3/32`                                            |
-   | **Allowed IPs**  | `10.10.0.0/24, 192.168.8.0/24`                           |
+   | **Allowed IPs**  | `10.10.0.0/24, <HAUPT-LAN>`                              |
    | Endpoint         | *(leer — OPNsense verbindet sich aktiv zum Raspi)*        |
    | Keepalive        | `25`                                                      |
 
    > **Allowed IPs** hier definiert, welche Subnetze OPNsense hinter dem Tunnel erreichbar macht:
    > - `10.10.0.0/24` = VPN-Subnetz
-   > - `192.168.8.0/24` = Hauptwohnsitz-LAN (Starlink-Seite)
+   > - `<HAUPT-LAN>` = Hauptwohnsitz-LAN (Starlink-Seite)
 
 3. **Save** → **„Apply Config"** klicken
 
@@ -333,7 +333,7 @@ interface: wg0
   ...
 
 peer: <OPNsense-Public-Key>
-  endpoint: [2a0d:3344:xxxx::1]:51820
+  endpoint: [2001:db8:NEBEN::RASPI]:51820
   latest handshake: 12 seconds ago    ← Verbindung aktiv!
   transfer: 1.23 MiB received, 456 KiB sent
 ```
@@ -372,8 +372,8 @@ Damit alle Geräte im Fritzbox-Netz das Hauptwohnsitz-LAN erreichen:
 
 | Netzwerk         | Subnetzmaske    | Gateway (Raspi LAN-IP)  |
 |-----------------|-----------------|-------------------------|
-| `192.168.10.0`  | `255.255.255.0` | `192.168.20.50`         |
-| `10.10.0.0`     | `255.255.255.0` | `192.168.20.50`         |
+| `<HAUPT-LAN-NET>` | `255.255.255.0` | `<RASPI-LAN-IP>`      |
+| `10.10.0.0`       | `255.255.255.0` | `<RASPI-LAN-IP>`      |
 
 ---
 
@@ -445,10 +445,10 @@ Optional — nützlich wenn OPNsense Firewall-Regeln auf die Client-IPv6 setzen 
 # Auf dem Raspberry Pi:
 sudo wg show wg0          # Handshake und Transfer prüfen
 ping 10.10.0.3            # OPNsense WireGuard-Interface (Hauptwohnsitz)
-ping 192.168.8.1          # OPNsense LAN-Gateway (Hauptwohnsitz)
+ping <HAUPT-GW>           # OPNsense LAN-Gateway (Hauptwohnsitz)
 
 # Von einem Gerät am Nebenwohnsitz (wenn Fritzbox-Route gesetzt):
-ping 192.168.8.1          # Hauptwohnsitz-LAN-Gateway
+ping <HAUPT-GW>           # Hauptwohnsitz-LAN-Gateway
 ping 10.10.0.1            # Raspi VPN-Interface
 ```
 

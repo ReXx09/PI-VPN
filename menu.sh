@@ -26,6 +26,13 @@ DOCKER_DIR="$SCRIPT_DIR/docker/nebenwohnsitz"
 ENV_FILE="$DOCKER_DIR/.env"
 COMPOSE_FILE="$DOCKER_DIR/docker-compose.yml"
 
+# ─── Diagnose-Konfiguration ───────────────────────────────────────────────────
+# Diese Werte anpassen oder als Umgebungsvariable vorab setzen:
+#   export VPN_HOST=vpn.meine-domain.de
+#   export HAUPT_GW=192.168.x.1
+VPN_HOST="${VPN_HOST:-vpn.deine-domain.de}"   # DDNS-Hostname des WireGuard-Servers
+HAUPT_GW="${HAUPT_GW:-<HAUPT-GW>}"            # LAN-Gateway des Hauptwohnsitzes
+
 # ─── Root-Check ───────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || { echo "Bitte als root ausführen: sudo bash $0"; exit 1; }
 [[ "$(uname -s)" == "Linux" ]] || { echo "Nur für Linux (Raspberry Pi OS)."; exit 1; }
@@ -469,9 +476,9 @@ menu_diag_wt() {
             22 72 9 \
             "1" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "2" "  WireGuard Handshake prüfen" \
-            "3" "  DNS-Auflösung testen  (vpn.rexxlab.uk)" \
+            "3" "  DNS-Auflösung testen  ($VPN_HOST)" \
             "4" "  Ping VPN-Gateway  (10.10.0.1)" \
-            "5" "  Ping Heimnetz-Gateway  (192.168.8.1)" \
+            "5" "  Ping Heimnetz-Gateway  ($HAUPT_GW)" \
             "6" "  IPv6-Adresse prüfen" \
             "7" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
             "8" "  Alle Tests auf einmal" \
@@ -523,15 +530,15 @@ menu_diag_wt() {
                 ;;
             3)
                 clear
-                echo -e "${BOLD}DNS-Auflösung: vpn.rexxlab.uk${NC}\n"
+                echo -e "${BOLD}DNS-Auflösung: ${VPN_HOST}${NC}\n"
                 if ! command -v dig &>/dev/null; then
                     echo -e "  ${YELLOW}⚠  'dig' nicht installiert → Option 1 wählen${NC}"
                 else
                     echo -e "  ${CYAN}A-Record (IPv4):${NC}"
-                    dig vpn.rexxlab.uk A +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    dig "$VPN_HOST" A +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
                     echo ""
                     echo -e "  ${CYAN}AAAA-Record (IPv6):${NC}"
-                    dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
                     echo ""
                     echo -e "  ${CYAN}Aktuelle IPv6 dieses Raspi:${NC}"
                     ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}' || echo "    (nicht ermittelbar)"
@@ -552,9 +559,9 @@ menu_diag_wt() {
                 ;;
             5)
                 clear
-                echo -e "${BOLD}Ping Heimnetz-Gateway (192.168.8.1):${NC}\n"
+                echo -e "${BOLD}Ping Heimnetz-Gateway (${HAUPT_GW}):${NC}\n"
                 if ip link show wg0 &>/dev/null; then
-                    ping -c 4 -W 2 192.168.8.1 2>/dev/null \
+                    ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
                         && echo -e "\n  ${GREEN}✔  Hauptwohnsitz-Gateway erreichbar${NC}" \
                         || echo -e "\n  ${RED}✘  Nicht erreichbar — Routing oder iptables-Regeln prüfen${NC}"
                 else
@@ -573,9 +580,9 @@ menu_diag_wt() {
                 curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' \
                     || echo -e "    ${YELLOW}⚠  Kein IPv6-Internet erreichbar${NC}"
                 echo ""
-                echo -e "  ${CYAN}AAAA in DNS (vpn.rexxlab.uk):${NC}"
+                echo -e "  ${CYAN}AAAA in DNS (${VPN_HOST}):${NC}"
                 if command -v dig &>/dev/null; then
-                    dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (nicht auflösbar)"
+                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (nicht auflösbar)"
                 else
                     echo -e "    ${DIM}dig nicht installiert → Option 1${NC}"
                 fi
@@ -613,11 +620,11 @@ menu_diag_wt() {
                 fi
                 echo ""
                 # 2. DNS
-                echo -e "${CYAN}[2/4] DNS (vpn.rexxlab.uk):${NC}"
+                echo -e "${CYAN}[2/4] DNS (${VPN_HOST}):${NC}"
                 if command -v dig &>/dev/null; then
                     local A AAAA
-                    A=$(dig vpn.rexxlab.uk A +short 2>/dev/null)
-                    AAAA=$(dig vpn.rexxlab.uk AAAA +short 2>/dev/null)
+                    A=$(dig "$VPN_HOST" A +short 2>/dev/null)
+                    AAAA=$(dig "$VPN_HOST" AAAA +short 2>/dev/null)
                     [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
                     [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
                 else
@@ -627,8 +634,8 @@ menu_diag_wt() {
                 # 3. Ping-Tests
                 echo -e "${CYAN}[3/4] Erreichbarkeit:${NC}"
                 if ip link show wg0 &>/dev/null; then
-                    ping -c 2 -W 1 10.10.0.1  &>/dev/null && echo -e "  VPN-GW 10.10.0.1:   ${GREEN}✔ erreichbar${NC}" || echo -e "  VPN-GW 10.10.0.1:   ${RED}✘ nicht erreichbar${NC}"
-                    ping -c 2 -W 1 192.168.8.1 &>/dev/null && echo -e "  HW-GW 192.168.8.1:  ${GREEN}✔ erreichbar${NC}" || echo -e "  HW-GW 192.168.8.1:  ${RED}✘ nicht erreichbar${NC}"
+                    ping -c 2 -W 1 10.10.0.1    &>/dev/null && echo -e "  VPN-GW 10.10.0.1: ${GREEN}✔ erreichbar${NC}" || echo -e "  VPN-GW 10.10.0.1: ${RED}✘ nicht erreichbar${NC}"
+                    ping -c 2 -W 1 "$HAUPT_GW"  &>/dev/null && echo -e "  HW-GW ${HAUPT_GW}: ${GREEN}✔ erreichbar${NC}" || echo -e "  HW-GW ${HAUPT_GW}: ${RED}✘ nicht erreichbar${NC}"
                 else
                     echo -e "  ${DIM}wg0 nicht aktiv — Pings übersprungen${NC}"
                 fi
@@ -834,9 +841,9 @@ text_diag() {
         echo -e "  ${BOLD}[DIAGNOSE] Diagnose & Tools${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
         echo -e "  ${BOLD}[2]${NC}  WireGuard Handshake prüfen"
-        echo -e "  ${BOLD}[3]${NC}  DNS-Auflösung testen  (vpn.rexxlab.uk)"
+        echo -e "  ${BOLD}[3]${NC}  DNS-Auflösung testen  ($VPN_HOST)"
         echo -e "  ${BOLD}[4]${NC}  Ping VPN-Gateway  (10.10.0.1)"
-        echo -e "  ${BOLD}[5]${NC}  Ping Heimnetz-Gateway  (192.168.8.1)"
+        echo -e "  ${BOLD}[5]${NC}  Ping Heimnetz-Gateway  ($HAUPT_GW)"
         echo -e "  ${BOLD}[6]${NC}  IPv6-Adresse prüfen"
         echo -e "  ${BOLD}[7]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
         echo -e "  ${BOLD}[8]${NC}  Alle Tests auf einmal"
@@ -880,10 +887,10 @@ text_diag() {
                 ;;
             3)
                 clear
-                echo -e "${BOLD}DNS: vpn.rexxlab.uk${NC}\n"
+                echo -e "${BOLD}DNS: ${VPN_HOST}${NC}\n"
                 if command -v dig &>/dev/null; then
-                    echo -e "  ${CYAN}A-Record:${NC}";    dig vpn.rexxlab.uk A    +short 2>/dev/null | sed 's/^/    /'
-                    echo -e "  ${CYAN}AAAA-Record:${NC}"; dig vpn.rexxlab.uk AAAA +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}A-Record:${NC}";    dig "$VPN_HOST" A    +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}AAAA-Record:${NC}"; dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /'
                     echo -e "  ${CYAN}Raspi IPv6:${NC}";  ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}'
                 else
                     echo -e "  ${YELLOW}⚠  dig nicht installiert → Option 1${NC}"
@@ -902,9 +909,9 @@ text_diag() {
                 ;;
             5)
                 clear
-                echo -e "${BOLD}Ping 192.168.8.1 (Hauptwohnsitz):${NC}\n"
+                echo -e "${BOLD}Ping ${HAUPT_GW} (Hauptwohnsitz):${NC}\n"
                 ip link show wg0 &>/dev/null \
-                    && { ping -c 4 -W 2 192.168.8.1 2>/dev/null \
+                    && { ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
                         && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
                         || echo -e "\n  ${RED}✘  Nicht erreichbar — iptables prüfen${NC}"; } \
                     || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
@@ -944,8 +951,8 @@ text_diag() {
                 echo -e "\n${CYAN}[2/4] DNS:${NC}"
                 if command -v dig &>/dev/null; then
                     local A AAAA
-                    A=$(dig vpn.rexxlab.uk A +short 2>/dev/null)
-                    AAAA=$(dig vpn.rexxlab.uk AAAA +short 2>/dev/null)
+                    A=$(dig "$VPN_HOST" A +short 2>/dev/null)
+                    AAAA=$(dig "$VPN_HOST" AAAA +short 2>/dev/null)
                     [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
                     [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
                 else
@@ -953,8 +960,8 @@ text_diag() {
                 fi
                 echo -e "\n${CYAN}[3/4] Erreichbarkeit:${NC}"
                 if ip link show wg0 &>/dev/null; then
-                    ping -c 2 -W 1 10.10.0.1  &>/dev/null && echo -e "  10.10.0.1:   ${GREEN}✔${NC}" || echo -e "  10.10.0.1:   ${RED}✘${NC}"
-                    ping -c 2 -W 1 192.168.8.1 &>/dev/null && echo -e "  192.168.8.1: ${GREEN}✔${NC}" || echo -e "  192.168.8.1: ${RED}✘${NC}"
+                    ping -c 2 -W 1 10.10.0.1    &>/dev/null && echo -e "  10.10.0.1: ${GREEN}✔${NC}" || echo -e "  10.10.0.1: ${RED}✘${NC}"
+                    ping -c 2 -W 1 "$HAUPT_GW"  &>/dev/null && echo -e "  ${HAUPT_GW}: ${GREEN}✔${NC}" || echo -e "  ${HAUPT_GW}: ${RED}✘${NC}"
                 else
                     echo -e "  ${DIM}wg0 nicht aktiv — übersprungen${NC}"
                 fi

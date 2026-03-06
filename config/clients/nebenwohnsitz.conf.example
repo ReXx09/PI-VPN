@@ -1,30 +1,25 @@
 # =============================================================================
-# WireGuard Client-Konfiguration — Nebenwohnsitz (Referenz)
+# WireGuard Client-Konfiguration — OPNsense Hauptwohnsitz (Referenz)
 #
-# Diese Datei dient als Referenz / Dokumentation.
-# Die wg0.conf wird von wireguard-ui automatisch generiert und verwaltet —
-# NICHT manuell bearbeiten während wireguard-ui läuft!
+# OPNsense übernimmt die Client-Rolle und verbindet sich aktiv zum Raspi-Server.
+# Diese Datei dient nur als Referenz — OPNsense konfiguriert WireGuard
+# über seine eigene WebUI (VPN → WireGuard → Instances + Peers).
 #
-# Pfad: /opt/pi-vpn/docker/nebenwohnsitz/data/wireguard/wg0.conf
-#
-# Konfiguration erfolgt über die wireguard-ui WebUI:
-#   http://<raspi-ip>:5000
-#   → "WireGuard Server" (= lokale Interface-Einstellungen)
-#   → "Wireguard Clients" → "+ New Client" (= OPNsense als Peer eintragen)
+# Entsprechende Anleitung: docs/OPNsense-WireGuard.md
 # =============================================================================
 
 [Interface]
 # Privater Schlüssel des Clients (generiert von wireguard-ui oder: wg genkey)
 PrivateKey = <CLIENT_PRIVATE_KEY>
 
-# VPN-IP des Clients im Tunnel-Subnetz
-Address = 10.10.0.2/24
+# VPN-IP von OPNsense im Tunnel-Subnetz
+Address = 10.10.0.3/24
 
-# MTU: 1280 sicher für DS-Lite IPv6 (Vodafone Kabel)
-MTU = 1280
+# MTU: 1420 Standard; bei IPv6-Tunnel ggf. auf 1280 reduzieren
+MTU = 1420
 
-# DNS: VPN-DNS (OPNsense am Hauptwohnsitz) oder Cloud-DNS
-DNS = 10.10.0.1, 1.1.1.1
+# DNS: OPNsense selbst oder Cloud-DNS
+DNS = <HAUPT-GW>, 1.1.1.1
 
 # iptables für Routing des Heimnetzes Nebenwohnsitz durch den Tunnel
 # Interface anpassen! (eth0 = kabelgebunden, wlan0 = WLAN)
@@ -45,21 +40,20 @@ PostDown = iptables  -D FORWARD -i wg0 -j ACCEPT; \
 # =============================================================================
 
 [Peer]
-# Öffentlicher Schlüssel des Servers (aus wireguard-ui kopieren)
+# Öffentlicher Schlüssel des Servers (Raspi) — aus wireguard-ui → Global Settings kopieren
 PublicKey = <SERVER_PUBLIC_KEY>
 
-# DDNS-Hostname des Servers (AAAA-Record, von ddns-go gepflegt)
-# WireGuard löst diesen IPv6-Hostnamen automatisch auf.
-Endpoint = vpn-home.DEINE-DOMAIN.de:51820
+# DDNS-Hostname des Raspi-Servers (AAAA-Record, von ddns-go gepflegt)
+# WireGuard löst diesen IPv6-Hostnamen beim Verbindungsaufbau auf.
+Endpoint = vpn.deine-domain.de:51820
 
 # --- VARIANTE A: Split-Tunnel (empfohlen) ---
-# Nur das Heimnetz des Hauptwohnsitzes und das VPN-Subnetz laufen durch den Tunnel.
-# Normaler Internet-Traffic läuft direkt über Vodafone.
-AllowedIPs = 10.10.0.0/24, 192.168.10.0/24
+# Nur das Heimnetz Nebenwohnsitz und das VPN-Subnetz laufen durch den Tunnel.
+# Normaler Internet-Traffic läuft direkt weiter.
+AllowedIPs = 10.10.0.0/24, <NEBEN-LAN>
 
 # --- VARIANTE B: Full-Tunnel (für Streaming-Dienste) ---
-# ALLES läuft über den VPN-Tunnel → erscheint als wärst du am Hauptwohnsitz.
-# Dafür Zeile oben auskommentieren und Zeile unten aktivieren:
+# ALLES läuft über den VPN-Tunnel.
 # AllowedIPs = 0.0.0.0/0, ::/0
 
 # Keepalive hält Tunnel durch Fritzbox-NAT und DS-Lite aktiv

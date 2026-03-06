@@ -1,9 +1,10 @@
 # =============================================================================
-# WireGuard Server-Konfiguration — Hauptwohnsitz
+# WireGuard Server-Konfiguration — Raspberry Pi (Nebenwohnsitz)
 # Diese Datei wird von wireguard-ui automatisch generiert und verwaltet.
 # Dieses Beispiel dient als Referenz / Dokumentation.
 #
-# Pfad auf dem Raspi: /opt/pi-vpn/docker/hauptwohnsitz/data/wireguard/wg0.conf
+# Pfad auf dem Raspi: /etc/wireguard/wg0.conf
+# (gemountet via: ./data/wireguard:/etc/wireguard in docker-compose.yml)
 # =============================================================================
 
 [Interface]
@@ -41,14 +42,14 @@ PostDown = iptables  -D FORWARD -i wg0 -j ACCEPT; \
 # =============================================================================
 
 [Peer]
-# Name (Kommentar): Nebenwohnsitz
-# Öffentlicher Schlüssel des Clients (wird in der WebUI beim Erstellen angezeigt)
-PublicKey = <CLIENT_PUBLIC_KEY>
+# Name (Kommentar): OPNsense Hauptwohnsitz
+# Öffentlicher Schlüssel von OPNsense (VPN → WireGuard → Instances → Public Key)
+PublicKey = <OPNSENSE_PUBLIC_KEY>
 
 # Erlaubte IP-Ranges die über diesen Peer geroutet werden:
-# 10.10.0.2/32   = VPN-IP des Clients (Pflicht)
-# 192.168.20.0/24 = LAN des Nebenwohnsitzes (für Site-to-Site)
-AllowedIPs = 10.10.0.2/32, 192.168.20.0/24
+# 10.10.0.3/32   = VPN-IP von OPNsense (Pflicht)
+# <HAUPT-LAN>    = LAN des Hauptwohnsitzes (für Site-to-Site; dein OPNsense-LAN eintragen)
+AllowedIPs = 10.10.0.3/32, <HAUPT-LAN>
 
 # Keepalive sichert den Tunnel durch CGNAT/DS-Lite (empfohlen: 25s)
 PersistentKeepalive = 25

@@ -2,9 +2,9 @@
 
 OPNsense übernimmt die **Client-Rolle** im VPN. Der WireGuard-Server läuft auf dem **Raspberry Pi am Nebenwohnsitz**.
 
-OPNsense verbindet sich aktiv nach außen zu `vpn.rexxlab.uk:51820` — Starlink blockiert ausgehende Verbindungen nicht.
+OPNsense verbindet sich aktiv nach außen zu `vpn.deine-domain.de:51820` — Starlink blockiert ausgehende Verbindungen nicht.
 
-> **Wichtig:** OPNsense hat **keinen eigenen DDNS-Dienst** (nicht in Services vorhanden). Das DDNS (`vpn.rexxlab.uk`) wird ausschließlich durch **ddns-go auf dem Raspberry Pi** aktualisiert.
+> **Wichtig:** OPNsense hat **keinen eigenen DDNS-Dienst** (nicht in Services vorhanden). Das DDNS (`vpn.deine-domain.de`) wird ausschließlich durch **ddns-go auf dem Raspberry Pi** aktualisiert.
 
 ---
 
@@ -12,9 +12,9 @@ OPNsense verbindet sich aktiv nach außen zu `vpn.rexxlab.uk:51820` — Starlink
 
 | Standort | LAN | VPN-IP | Rolle |
 |----------|-----|--------|-------|
-| Nebenwohnsitz — Raspi | `192.168.20.0/24` | `10.10.0.1/24` | WireGuard Server |
-| Hauptwohnsitz — OPNsense | `192.168.8.0/24` | `10.10.0.3/24` | WireGuard Client |
-| Handy (Thomas-Handy) | — | `10.10.0.2/32` | WireGuard Client |
+| Nebenwohnsitz — Raspi | `<NEBEN-LAN>` | `10.10.0.1/24` | WireGuard Server |
+| Hauptwohnsitz — OPNsense | `<HAUPT-LAN>` | `10.10.0.3/24` | WireGuard Client |
+| Handy (Client) | — | `10.10.0.2/32` | WireGuard Client |
 
 ---
 
@@ -50,7 +50,7 @@ Diesen Public Key notieren — er wird in Schritt 3 (Peer) eingetragen.
 | Private key | *(wird automatisch generiert)* |
 | Listen port | *(leer lassen — OPNsense ist Client)* |
 | MTU | `1420` |
-| DNS servers | `192.168.8.1` *(OPNsense selbst)* |
+| DNS servers | `<HAUPT-GW>` *(OPNsense selbst)* |
 | Tunnel address | `10.10.0.3/24` |
 | Peers | *(nach Schritt 3 hier eintragen)* |
 | Disable routes | ☐ |
@@ -71,8 +71,8 @@ Diesen Public Key notieren — er wird in Schritt 3 (Peer) eingetragen.
 | Name | `Raspi-Nebenwohnsitz` |
 | Public key | *(Public Key des Raspi aus Schritt 1)* |
 | Pre-shared key | *(optional — aus wireguard-ui kopieren falls gesetzt)* |
-| Allowed IPs | `10.10.0.0/24, 192.168.20.0/24` |
-| Endpoint address | `vpn.rexxlab.uk` |
+| Allowed IPs | `10.10.0.0/24, <NEBEN-LAN>` |
+| Endpoint address | `vpn.deine-domain.de` |
 | Endpoint port | `51820` |
 | Instances | `PIVPN` *(die in Schritt 2 erstellte Instance)* |
 | Keepalive interval | `25` |
@@ -147,7 +147,7 @@ Auf dem Raspi in wireguard-ui (`http://<raspi-ip>:5000`):
 |------|------|
 | Name | `OPNsense-Hauptwohnsitz` |
 | IP Allocation | `10.10.0.3/32` |
-| Allowed IPs | `10.10.0.0/24, 192.168.8.0/24` |
+| Allowed IPs | `10.10.0.0/24, <HAUPT-LAN>` |
 | Public key | *(Public Key der OPNsense-Instance aus Schritt 2)* |
 | Pre-shared key | *(falls in OPNsense gesetzt — hier identisch eintragen)* |
 
@@ -173,7 +173,7 @@ sudo wg show
 ping 10.10.0.3
 
 # Vom Raspi → Hauptwohnsitz LAN:
-ping 192.168.8.1
+ping <HAUPT-GW>
 ```
 
 ---
@@ -183,6 +183,6 @@ ping 192.168.8.1
 | Problem | Ursache | Lösung |
 |---------|---------|--------|
 | Kein Handshake | Starlink blockiert eingehend | OPNsense verbindet outbound — Keepalive 25s sicherstellt Verbindung |
-| `vpn.rexxlab.uk` nicht auflösbar | DDNS nicht aktuell | ddns-go auf Raspi prüfen: `sudo docker logs ddns-go` |
+| `vpn.deine-domain.de` nicht auflösbar | DDNS nicht aktuell | ddns-go auf Raspi prüfen: `sudo docker logs ddns-go` |
 | Traffic kommt nicht an | iptables auf Raspi fehlen | Post Up Script in wireguard-ui prüfen |
 | OPNsense zeigt keine DDNS-Option | DDNS-Plugin nicht in OPNsense | Korrekt — DDNS läuft auf dem Raspi via ddns-go |

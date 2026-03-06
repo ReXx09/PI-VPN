@@ -46,9 +46,9 @@ Nebenwohnsitz                          Hauptwohnsitz
 Raspberry Pi (WireGuard-SERVER)        OPNsense (WireGuard-CLIENT)
   • wireguard-ui (Docker, Port 5000)     • os-wireguard Plugin
   • ddns-go     (Docker, Port 9876)      • VPN-IP: 10.10.0.3/24
-  • VPN-IP: 10.10.0.1/24                • LAN: 192.168.8.0/24
-  • LAN: 192.168.20.0/24
-  • DDNS → vpn.rexxlab.uk (AAAA)
+  • VPN-IP: 10.10.0.1/24                • LAN: <HAUPT-LAN>
+  • LAN: <NEBEN-LAN>
+  • DDNS → vpn.deine-domain.de (AAAA)
 
          ◄══ WireGuard Tunnel über IPv6 (MTU 1420, Keepalive 25s) ══►
               OPNsense verbindet aktiv outbound (Starlink blockiert inbound!)
@@ -80,11 +80,11 @@ Raspberry Pi (WireGuard-SERVER)        OPNsense (WireGuard-CLIENT)
 │              NEBENWOHNSITZ                           │
 │  Vodafone Kabel (DS-Lite, IPv6 nativ)                │
 │       │                                              │
-│   Fritzbox 6660 → LAN 192.168.20.0/24               │
+│   Fritzbox 6660 → LAN <NEBEN-LAN>                    │
 │       │                                              │
 │   Raspberry Pi  ← EINZIGER RASPI                     │
 │   [wireguard-ui — SERVER]  VPN-IP: 10.10.0.1         │
-│   [ddns-go]  → vpn.rexxlab.uk (AAAA)                │
+│   [ddns-go]  → vpn.deine-domain.de (AAAA)            │
 │                                                      │
 │       ⬆ WireGuard Tunnel über IPv6 (UDP 51820)      │
 │         OPNsense verbindet aktiv outbound            │
@@ -98,9 +98,9 @@ Raspberry Pi (WireGuard-SERVER)        OPNsense (WireGuard-CLIENT)
 │   OPNsense                                           │
 │   ├── WireGuard-Plugin (CLIENT, verbindet outbound)  │
 │   ├── KEIN eigenes DDNS (Services hat keinen Dienst) │
-│   └── LAN 192.168.8.0/24  VPN-IP: 10.10.0.3         │
+│   └── LAN <HAUPT-LAN>      VPN-IP: 10.10.0.3         │
 │                                                      │
-│   Thomas-Handy (WireGuard-Client, 10.10.0.2/32)     │
+│   Handy (WireGuard-Client, 10.10.0.2/32)             │
 └──────────────────────────────────────────────────────┘
 ```
 ```

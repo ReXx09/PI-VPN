@@ -89,14 +89,14 @@ Damit alle Fritzbox-Geräte das Hauptwohnsitz-LAN erreichen (nicht nur Raspi-Ger
 
 | Feld         | Wert                                        |
 |--------------|---------------------------------------------|
-| IPv4-Netz    | `192.168.8.0` / `255.255.255.0`             |
-| Gateway      | `192.168.20.x` (LAN-IP des Raspi im Fritzbox-Netz) |
+| IPv4-Netz    | `<HAUPT-LAN-NET>` / `255.255.255.0`          |
+| Gateway      | `<RASPI-LAN-IP>` (LAN-IP des Raspi im Fritzbox-Netz) |
 | Beschreibung | Hauptwohnsitz via WireGuard                 |
 
 | Feld         | Wert                                        |
 |--------------|---------------------------------------------|
 | IPv4-Netz    | `10.10.0.0` / `255.255.255.0`               |
-| Gateway      | `192.168.20.x`                              |
+| Gateway      | `<RASPI-LAN-IP>`                            |
 | Beschreibung | WireGuard VPN-Subnetz                       |
 
 > **Raspi LAN-IP ermitteln:** `hostname -I | awk '{print $1}'` auf dem Raspi ausführen.
@@ -110,8 +110,8 @@ Der Nebenwohnsitz-Raspi muss den DDNS-Hostnamen des Nebenwohnsitzes auflösen k�
 
 ```bash
 # Auf dem Nebenwohnsitz-Raspi:
-dig AAAA vpn.rexxlab.uk +short
-ping6 vpn.rexxlab.uk
+dig AAAA vpn.deine-domain.de +short
+ping6 vpn.deine-domain.de
 ```
 
 → Es muss eine **IPv6-Adresse** (`2a0d:...`) erscheinen.
@@ -137,7 +137,7 @@ sudo wg show wg0
 
 # Erwartete Ausgabe (Handshake und Traffic):
 # peer: <OPNSENSE_PUBLIC_KEY>
-#   endpoint: [2a0d:3344:xxxx::1]:51820
+#   endpoint: [2001:db8:NEBEN::RASPI]:51820
 #   latest handshake: 12 seconds ago
 #   transfer: 1.23 MiB received, 456 KiB sent
 
@@ -145,5 +145,5 @@ sudo wg show wg0
 ping 10.10.0.3
 
 # Ping in das Hauptwohnsitz-LAN:
-ping 192.168.8.1
+ping <HAUPT-GW>
 ```

@@ -111,14 +111,13 @@ echo -e "  ${DIM}Nebenwohnsitz — Raspberry Pi — wireguard-ui + ddns-go${NC}"
 echo ""
 divider
 echo ""
-echo -e "  Dieser Wizard richtet deinen Raspberry Pi als WireGuard-Client"
-echo -e "  ein, der sich über ${BOLD}IPv6${NC} mit deiner OPNsense verbindet."
+echo -e "  Dieser Wizard richtet deinen Raspberry Pi als WireGuard-${BOLD}Server${NC}"
+echo -e "  ein. OPNsense übernimmt die Client-Rolle und verbindet sich aktiv zu diesem Raspi."
 echo ""
 echo -e "  ${YELLOW}Voraussetzungen:${NC}"
-echo -e "  • OPNsense am Hauptwohnsitz ist bereits konfiguriert"
-echo -e "    (WireGuard-Plugin aktiv, Peer 'nebenwohnsitz' angelegt)"
-echo -e "  • Du kennst den öffentlichen Schlüssel der OPNsense"
-echo -e "  • Du hast einen DDNS-Hostnamen für die OPNsense (AAAA-Record)"
+echo -e "  • OPNsense am Hauptwohnsitz ${BOLD}noch nicht${NC} konfiguriert (das folgt in OPNsense-WireGuard.md)"
+echo -e "  • Fritzbox 6660: IPv6 aktiv, UDP 51820 Portfreigabe eingerichtet"
+echo -e "  • DDNS-Domain bereits bei Cloudflare/anderem Anbieter vorbereitet"
 echo ""
 divider
 
@@ -260,11 +259,12 @@ divider
 echo ""
 echo -e "  ${BOLD}VPN-IP dieses Raspberry Pi${NC}"
 echo -e "  ${DIM}Das ist die IP im WireGuard-Tunnel-Subnetz (10.10.0.0/24).${NC}"
-echo -e "  ${DIM}OPNsense (Server) hat 10.10.0.1 — dieser Raspi bekommt 10.10.0.2.${NC}"
+  echo -e "  ${DIM}Dieser Raspi ist der Server — Standard-IP: 10.10.0.1/24.${NC}"
+  echo -e "  ${DIM}Clients (OPNsense, Handy, ...) bekommen 10.10.0.2+.${NC}"
 echo ""
 
-ask "Tunnel-IP dieses Raspberry Pi:" "10.10.0.2/24" WGUI_SERVER_ADDR
-[[ -z "$WGUI_SERVER_ADDR" ]] && WGUI_SERVER_ADDR="10.10.0.2/24"
+ask "Tunnel-IP dieses Raspberry Pi:" "10.10.0.1/24" WGUI_SERVER_ADDR
+[[ -z "$WGUI_SERVER_ADDR" ]] && WGUI_SERVER_ADDR="10.10.0.1/24"
 ok "VPN-IP: $WGUI_SERVER_ADDR"
 
 blank
@@ -279,12 +279,12 @@ ok "MTU: $WGUI_MTU"
 
 blank
 echo -e "  ${BOLD}DNS-Server für VPN-Clients${NC}"
-echo -e "  ${DIM}10.10.0.1 = OPNsense (empfohlen, löst Heimnetz-Hostnamen auf).${NC}"
+  echo -e "  ${DIM}1.1.1.1 (Cloudflare) oder 8.8.8.8 (Google) sind sichere Werte.${NC}"
 echo -e "  ${DIM}Mehrere Einträge mit Komma trennen.${NC}"
 echo ""
 
-ask "DNS:" "10.10.0.1,1.1.1.1" WGUI_DNS
-[[ -z "$WGUI_DNS" ]] && WGUI_DNS="10.10.0.1,1.1.1.1"
+ask "DNS:" "1.1.1.1" WGUI_DNS
+[[ -z "$WGUI_DNS" ]] && WGUI_DNS="1.1.1.1"
 ok "DNS: $WGUI_DNS"
 
 blank
@@ -293,8 +293,8 @@ echo -e "  ${DIM}Wird für die iptables MASQUERADE-Regel benötigt,${NC}"
 echo -e "  ${DIM}damit alle Geräte in der Fritzbox den VPN-Tunnel nutzen können.${NC}"
 echo ""
 
-ask "LAN-Subnetz am Nebenwohnsitz:" "192.168.20.0/24" LAN_SUBNET
-[[ -z "$LAN_SUBNET" ]] && LAN_SUBNET="192.168.20.0/24"
+ask "LAN-Subnetz am Nebenwohnsitz:" "" LAN_SUBNET
+[[ -z "$LAN_SUBNET" ]] && { warn "LAN-Subnetz muss angegeben werden!"; exit 1; }
 ok "LAN-Subnetz: $LAN_SUBNET"
 
 blank
@@ -464,21 +464,20 @@ echo -e "     • Post Down       :"
 echo -e "       ${DIM}${POSTDOWN}${NC}"
 echo -e "     → ${BOLD}\"Save\"${NC} klicken"
 echo ""
-echo -e "  ${CYAN}3.${NC} ${BOLD}\"Wireguard Clients\"${NC} → ${BOLD}\"+New Client\"${NC} (= OPNsense als Peer):"
+echo -e "  ${CYAN}3.${NC} ${BOLD}\"Wireguard Clients\"${NC} → ${BOLD}\"+New Client\"${NC} (= OPNsense als Peer eintragen):"
 echo -e "     • Name            : OPNsense-Hauptwohnsitz"
-echo -e "     • Public Key      : <Öffentlichen Schlüssel aus OPNsense einfügen>"
-echo -e "       $(echo -e "${DIM}OPNsense → VPN → WireGuard → Lokal → wg-server → Schlüssel${NC}")"
-echo -e "     • Allocated IPs   : 10.10.0.1/32"
+echo -e "     • Public Key      : <Public Key aus OPNsense: VPN → WireGuard → Instances>"
+echo -e "     • Allocated IPs   : 10.10.0.3/32"
 echo -e "     • Allowed IPs:"
-echo -e "       ${BOLD}Split-Tunnel${NC}: 10.10.0.0/24, 192.168.10.0/24"
+echo -e "       ${BOLD}Split-Tunnel${NC}: 10.10.0.0/24, <HAUPT-LAN>"
 echo -e "       ${BOLD}Full-Tunnel${NC} : 0.0.0.0/0, ::/0  (alle Streaming-Dienste)"
-echo -e "     • Endpoint        : vpn-home.DEINE-DOMAIN.de:51820"
+echo -e "     • Endpoint        : leer lassen (OPNsense verbindet sich aktiv zu diesem Raspi)"
 echo -e "     • Keepalive       : 25"
 echo -e "     → ${BOLD}\"Save\"${NC} → ${BOLD}\"Apply Config\"${NC}"
 echo ""
 echo -e "  ${CYAN}4.${NC} Tunnel prüfen:"
-echo -e "     ${DIM}sudo docker exec wireguard-ui wg show${NC}"
-echo -e "     (Latest handshake sollte erscheinen sobald OPNsense verbindet)"
+echo -e "     ${DIM}sudo wg show wg0${NC}"
+echo -e "     (Latest handshake sollte erscheinen sobald OPNsense sich verbindet)"
 echo ""
 
 if $SETUP_DDNS; then

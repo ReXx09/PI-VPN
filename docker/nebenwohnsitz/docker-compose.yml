@@ -3,8 +3,11 @@
 # Vodafone Kabel (DS-Lite) + Fritzbox 6660 + Raspberry Pi
 #
 # Architektur:
-#   Hauptwohnsitz → OPNsense mit WireGuard-Plugin (Server, kein Raspi dort)
-#   Nebenwohnsitz → Dieser Raspi als WireGuard-Client mit Web-UI + DDNS-Updater
+#   Nebenwohnsitz → Dieser Raspi als WireGuard-SERVER mit Web-UI + DDNS-Updater
+#   Hauptwohnsitz → OPNsense als WireGuard-CLIENT (verbindet sich outbound zu diesem Raspi)
+#
+#   Starlink blockiert eingehende IPv6 → Raspi (Nebenwohnsitz) ist der Server,
+#   OPNsense (Hauptwohnsitz) verbindet sich aktiv nach außen.
 #
 # Stack:
 #   wireguard-ui  → verwaltet das native wg0-Interface + Web-UI auf Port 5000
@@ -20,9 +23,9 @@
 #   1. cp .env.example .env && nano .env  (Passwörter setzen)
 #   2. docker compose up -d
 #   3. WebUI öffnen: http://<raspi-ip>:5000
-#   4. WireGuard Server-Einstellungen prüfen (VPN-IP: 10.10.0.2/24)
-#   5. Peer hinzufügen: OPNsense als Server eintragen (siehe .env.example)
-#   6. "Apply Config" → Tunnel baut sich automatisch auf
+#   4. WireGuard Server-Einstellungen prüfen (VPN-IP: 10.10.0.1/24)
+#   5. Peer hinzufügen: OPNsense als Client/Peer eintragen (Public Key aus OPNsense kopieren)
+#   6. "Apply Config" → Tunnel baut sich auf sobald OPNsense sich verbindet
 # =============================================================================
 
 services:
@@ -45,7 +48,7 @@ services:
   #     - Name: OPNsense-Server
   #     - Public Key: <öffentlicher Schlüssel des OPNsense WireGuard-Servers>
   #     - Allocated IPs: 10.10.0.1/32
-  #     - Allowed IPs: 10.10.0.0/24, 192.168.10.0/24 (Split) ODER 0.0.0.0/0 (Full)
+  #     - Allowed IPs: 10.10.0.0/24, <HAUPT-LAN> (Split) ODER 0.0.0.0/0 (Full)
   #     - Endpoint: vpn-home.deine-domain.de:51820
   #     - Persistent Keepalive: 25
   #
@@ -61,7 +64,7 @@ services:
 
     # HOST-Netz: wg0 wird direkt auf dem Host angelegt.
     # Nur so funktioniert wg-quick korrekt und iptables-MASQUERADE
-    # für das Fritzbox-Heimnetz (192.168.20.0/24) greift.
+    # für das Fritzbox-Heimnetz (<NEBEN-LAN>) greift.
     network_mode: host
 
     environment:
@@ -69,11 +72,11 @@ services:
       - WGUI_USERNAME=${WGUI_USERNAME:-admin}
       - WGUI_PASSWORD=${WGUI_PASSWORD}
 
-      # --- WireGuard Interface (dieser Raspi als Client) ---
-      - WGUI_SERVER_INTERFACE_ADDRESSES=10.10.0.2/24
+      # --- WireGuard Interface (dieser Raspi als Server) ---
+      - WGUI_SERVER_INTERFACE_ADDRESSES=10.10.0.1/24
       - WGUI_SERVER_LISTEN_PORT=51820
       - WGUI_MTU=${WGUI_MTU:-1280}
-      - WGUI_DNS=${WGUI_DNS:-10.10.0.1,1.1.1.1}
+      - WGUI_DNS=${WGUI_DNS:-1.1.1.1}
       - WGUI_PERSISTENT_KEEPALIVE=25
 
       # Konfigurationsdatei (wird von wireguard-ui verwaltet)
