@@ -3,6 +3,9 @@
 # PI-VPN — Zentrales Menü (TUI)
 # Grafische Terminal-Oberfläche für alle PI-VPN Funktionen
 #
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
+#
 # Ausführen als: sudo bash /opt/pi-vpn/menu.sh
 #
 # Funktionen:
@@ -135,7 +138,7 @@ main_menu_whiptail() {
 
         local CHOICE
         CHOICE=$(whiptail \
-            --title "PI-VPN | Zentrales Menue  |  $(hostname)" \
+            --title "PI-VPN | Zentrales Menue  |  $(hostname)  |  © 2026 Bocki" \
             --menu "${STATUS_LINE}\n\nWähle eine Kategorie:" \
             24 84 9 \
             "1" "  🔧  Setup & Installation" \
@@ -675,6 +678,7 @@ banner_text() {
     echo -e "  ${BOLD}Site-to-Site WireGuard — Zentrales Menü${NC}"
     echo -e "  ${DIM}$(vpn_status)  |  $(container_status)  |  $(ddns_status)  |  $(hostname)${NC}"
     blank
+    echo -e "  ${DIM}© 2026 Bocki — MIT License — github.com/ReXx09/PI-VPN${NC}"
     divider_text
 }
 
@@ -1003,5 +1007,6 @@ fi
 
 clear
 echo ""
-echo -e "  ${DIM}PI-VPN Menü beendet. Auf Wiedersehen!${NC}"
+echo -e "  ${DIM}PI-VPN beendet. Auf Wiedersehen!${NC}"
+echo -e "  ${DIM}© 2026 Bocki — MIT License — https://github.com/ReXx09/PI-VPN${NC}"
 echo ""
