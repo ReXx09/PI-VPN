@@ -179,15 +179,29 @@ Siehe → [docs/OPNsense-WireGuard.md](docs/OPNsense-WireGuard.md)
 - Peer `nebenwohnsitz` anlegen
 - Dynamisches DNS einrichten (AAAA-Record)
 
-### 2. Raspberry Pi (Nebenwohnsitz) — Zentrales Menü & Installer
+### 2. Raspberry Pi (Nebenwohnsitz) — Installation
+
+#### Option A — git clone (empfohlen)
 
 ```bash
-# Repo klonen — DEIN_TOKEN durch den GitHub Fine-grained Token ersetzen
-# (Token erstellen: github.com → Settings → Developer settings → Fine-grained tokens)
-# Beispiel-Token-Format: github_pat_11ABCDEF_...
-sudo git clone https://DEIN_TOKEN@github.com/ReXx09/PI-VPN.git /opt/pi-vpn
+# Repo klonen (kein Token nötig, da public)
+sudo git clone https://github.com/ReXx09/PI-VPN.git /opt/pi-vpn
 
 # Zentrales Menü starten — grafische TUI-Oberfläche für alle Funktionen
+cd /opt/pi-vpn
+sudo bash menu.sh
+```
+
+#### Option B — ZIP-Download (ohne git)
+
+```bash
+# Aktuelles Release als ZIP herunterladen und entpacken
+cd /tmp
+wget https://github.com/ReXx09/PI-VPN/archive/refs/tags/v1.0.0.tar.gz
+sudo mkdir -p /opt/pi-vpn
+sudo tar -xzf v1.0.0.tar.gz --strip-components=1 -C /opt/pi-vpn
+
+# Zentrales Menü starten
 cd /opt/pi-vpn
 sudo bash menu.sh
 ```
