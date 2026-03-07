@@ -18,78 +18,130 @@ OPNsense verbindet sich aktiv nach außen zu `vpn.deine-domain.de:51820` — Sta
 
 ---
 
-## Voraussetzung: WireGuard-Plugin installieren
+## Überblick: Ablauf in zwei Phasen
+
+```
+Phase 1 — Raspi (wireguard-ui):
+  Client "OPNsense-Hauptwohnsitz" anlegen → .conf herunterladen
+  → wireguard-ui generiert Schlüsselpaar und trägt Peer automatisch ein
+
+Phase 2 — OPNsense:
+  Werte aus der .conf in OPNsense Instance + Peer eintragen
+  → kein manuelles Key-Handling, keine Hin-und-Her-Kopiererei
+```
+
+---
+
+## Phase 1 — wireguard-ui auf dem Raspi
+
+### Schritt 1 — WireGuard-Plugin in OPNsense installieren
 
 **OPNsense → System → Plugins**
 
-→ `os-wireguard` suchen → **[+] Installieren** → danach OPNsense neu starten.
+→ `os-wireguard` suchen → **[+] Installieren** → OPNsense neu starten.
+
+*(Schon vor Phase 2 erledigen — der Neustart dauert)*
 
 ---
 
-## Schritt 1 — Public Key des Raspi ermitteln
+### Schritt 2 — OPNsense-Client in wireguard-ui anlegen
 
-Auf dem Raspberry Pi:
+Öffne wireguard-ui auf dem Raspi: `http://<RASPI-LAN-IP>:5000`
 
-```bash
-sudo wg show wg0 public-key
+**WireGuard Clients → + New Client**
+
+| Feld | Wert |
+|------|------|
+| Name | `OPNsense-Hauptwohnsitz` |
+| Email | *(leer lassen)* |
+| IP Allocation | `10.10.0.3/32` |
+| Allowed IPs | `10.10.0.0/24, <HAUPT-LAN>` |
+| Extra Allowed IPs | *(leer lassen)* |
+| Use server DNS | ☐ |
+| Enable after creation | ✅ |
+
+→ **Submit**
+
+---
+
+### Schritt 3 — Konfiguration herunterladen & Config anwenden
+
+1. In der Client-Liste den Eintrag `OPNsense-Hauptwohnsitz` suchen
+2. Auf das **Download-Icon** klicken → `.conf`-Datei wird heruntergeladen
+3. Oben rechts → **Apply Config** klicken (damit der neue Peer auf dem Raspi aktiv wird)
+
+Die `.conf`-Datei sieht ungefähr so aus — **diese Werte brauchst du für Phase 2:**
+
+```ini
+[Interface]
+Address    = 10.10.0.3/24
+PrivateKey = <OPNSENSE-PRIVATE-KEY>          ← in OPNsense Instance eintragen
+DNS        = 1.1.1.1
+
+[Peer]
+PublicKey           = <RASPI-SERVER-PUBLIC-KEY>   ← in OPNsense Peer eintragen
+PresharedKey        = <PRESHARED-KEY>             ← falls vorhanden
+AllowedIPs          = 10.10.0.0/24, <HAUPT-LAN>
+Endpoint            = vpn.deine-domain.de:51820
+PersistentKeepalive = 25
 ```
 
-Diesen Public Key notieren — er wird in Schritt 3 (Peer) eingetragen.
+> **Hinweis:** OPNsense hat keinen `.conf`-Import-Button. Die Datei dient als Spickzettel — du überträgst die Werte manuell in die GUI-Felder.
 
 ---
 
-## Schritt 2 — WireGuard Instance anlegen
+## Phase 2 — OPNsense konfigurieren
+
+### Schritt 4 — WireGuard Instance anlegen
 
 **OPNsense → VPN → WireGuard → Instances → [+] Add**
 
-| Feld | Wert |
-|------|------|
-| Enabled | ✅ |
-| Name | `PIVPN` |
-| Public key | *(Zahnrad-Icon klicken → Schlüsselpaar generieren)* |
-| Private key | *(wird automatisch generiert)* |
-| Listen port | *(leer lassen — OPNsense ist Client)* |
-| MTU | `1420` |
-| DNS servers | `<HAUPT-GW>` *(OPNsense selbst)* |
-| Tunnel address | `10.10.0.3/24` |
-| Peers | *(nach Schritt 3 hier eintragen)* |
-| Disable routes | ☐ |
+| Feld | Wert | Quelle |
+|------|------|--------|
+| Enabled | ✅ | — |
+| Name | `PIVPN` | — |
+| Private key | *(aus `.conf` → `PrivateKey`)* | .conf `[Interface]` |
+| Public key | *(wird automatisch berechnet — kein Eintrag nötig)* | — |
+| Listen port | *(leer lassen — OPNsense ist Client)* | — |
+| MTU | `1420` | — |
+| DNS servers | `<HAUPT-GW>` *(OPNsense LAN-IP)* | — |
+| Tunnel address | `10.10.0.3/24` | .conf `Address` |
+| Peers | *(nach Schritt 5 hier eintragen)* | — |
+| Disable routes | ☐ | — |
 
 → **Save**
 
-> **Hinweis:** Den generierten **Public Key der OPNsense-Instance** notieren — er muss in wireguard-ui auf dem Raspi als Peer eingetragen werden.
-
 ---
 
-## Schritt 3 — Peer (Raspi) anlegen
+### Schritt 5 — Peer (Raspi-Server) anlegen
 
 **OPNsense → VPN → WireGuard → Peers → [+] Add**
 
-| Feld | Wert |
-|------|------|
-| Enabled | ✅ |
-| Name | `Raspi-Nebenwohnsitz` |
-| Public key | *(Public Key des Raspi aus Schritt 1)* |
-| Pre-shared key | *(optional — aus wireguard-ui kopieren falls gesetzt)* |
-| Allowed IPs | `10.10.0.0/24, <NEBEN-LAN>` |
-| Endpoint address | `vpn.deine-domain.de` |
-| Endpoint port | `51820` |
-| Instances | `PIVPN` *(die in Schritt 2 erstellte Instance)* |
-| Keepalive interval | `25` |
+| Feld | Wert | Quelle |
+|------|------|--------|
+| Enabled | ✅ | — |
+| Name | `Raspi-Nebenwohnsitz` | — |
+| Public key | *(aus `.conf` → `PublicKey`)* | .conf `[Peer]` |
+| Pre-shared key | *(aus `.conf` → `PresharedKey`, falls vorhanden)* | .conf `[Peer]` |
+| Allowed IPs | `10.10.0.0/24, <NEBEN-LAN>` | — |
+| Endpoint address | `vpn.deine-domain.de` | .conf `Endpoint` |
+| Endpoint port | `51820` | .conf `Endpoint` |
+| Instances | `PIVPN` | — |
+| Keepalive interval | `25` | .conf `PersistentKeepalive` |
 
 → **Save**
 
 ---
 
-## Schritt 4 — Instance mit Peer verknüpfen
+### Schritt 6 — Instance mit Peer verknüpfen
 
-Zurück zu **VPN → WireGuard → Instances → PIVPN → Bearbeiten**
+**VPN → WireGuard → Instances → PIVPN → Bearbeiten**
 
 → Im Feld **Peers** den soeben angelegten `Raspi-Nebenwohnsitz` auswählen → **Save**
 
 ---
 
-## Schritt 5 — WireGuard aktivieren
+### Schritt 7 — WireGuard aktivieren
 
 **OPNsense → VPN → WireGuard → General**
 
@@ -97,7 +149,7 @@ Zurück zu **VPN → WireGuard → Instances → PIVPN → Bearbeiten**
 
 ---
 
-## Schritt 6 — Interface zuweisen
+### Schritt 8 — Interface zuweisen
 
 **OPNsense → Interfaces → Assignments**
 
@@ -116,7 +168,7 @@ Zurück zu **VPN → WireGuard → Instances → PIVPN → Bearbeiten**
 
 ---
 
-## Schritt 7 — Firewall-Regel auf PIVPN-Interface
+### Schritt 9 — Firewall-Regel auf PIVPN-Interface
 
 **OPNsense → Firewall → Rules → PIVPN → [+] Add**
 
@@ -134,24 +186,6 @@ Zurück zu **VPN → WireGuard → Instances → PIVPN → Bearbeiten**
 → **Save** → **Apply Changes**
 
 > **Keine WAN-Regel nötig.** OPNsense baut die Verbindung selbst auf (outbound). Die Stateful Firewall lässt Return-Traffic automatisch durch.
-
----
-
-## Schritt 8 — Raspi-Peer in wireguard-ui nachtragen
-
-Auf dem Raspi in wireguard-ui (`http://<raspi-ip>:5000`):
-
-**WireGuard Clients → + New Client**
-
-| Feld | Wert |
-|------|------|
-| Name | `OPNsense-Hauptwohnsitz` |
-| IP Allocation | `10.10.0.3/32` |
-| Allowed IPs | `10.10.0.0/24, <HAUPT-LAN>` |
-| Public key | *(Public Key der OPNsense-Instance aus Schritt 2)* |
-| Pre-shared key | *(falls in OPNsense gesetzt — hier identisch eintragen)* |
-
-→ **Save** → **Apply Config**
 
 ---
 
@@ -182,7 +216,8 @@ ping <HAUPT-GW>
 
 | Problem | Ursache | Lösung |
 |---------|---------|--------|
-| Kein Handshake | Starlink blockiert eingehend | OPNsense verbindet outbound — Keepalive 25s sicherstellt Verbindung |
+| Kein Handshake | Starlink blockiert eingehend | OPNsense verbindet outbound — Keepalive 25s stellt Verbindung sicher |
 | `vpn.deine-domain.de` nicht auflösbar | DDNS nicht aktuell | ddns-go auf Raspi prüfen: `sudo docker logs ddns-go` |
 | Traffic kommt nicht an | iptables auf Raspi fehlen | Post Up Script in wireguard-ui prüfen |
 | OPNsense zeigt keine DDNS-Option | DDNS-Plugin nicht in OPNsense | Korrekt — DDNS läuft auf dem Raspi via ddns-go |
+| Private Key wird nicht akzeptiert | Falsches Format | Aus der `.conf` kopieren — muss Base64-String sein (44 Zeichen) |
