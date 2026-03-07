@@ -104,7 +104,7 @@ PersistentKeepalive = 25
 | Public key | *(wird automatisch berechnet — kein Eintrag nötig)* | — |
 | Listen port | *(leer lassen — OPNsense ist Client)* | — |
 | MTU | `1420` | — |
-| DNS servers | `<HAUPT-GW>` *(OPNsense LAN-IP)* | — |
+| DNS servers | *(leer lassen — OPNsense ist Router, kein DNS-Client)* | — |
 | Tunnel address | `10.10.0.3/24` | .conf `Address` |
 | Peers | *(nach Schritt 5 hier eintragen)* | — |
 | Disable routes | ☐ | — |
