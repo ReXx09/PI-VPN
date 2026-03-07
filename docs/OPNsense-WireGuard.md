@@ -50,17 +50,21 @@ Phase 2 — OPNsense:
 
 **WireGuard Clients → + New Client**
 
-| Feld | Wert |
-|------|------|
-| Name | `OPNsense-Hauptwohnsitz` |
-| Email | *(leer lassen)* |
-| IP Allocation | `10.10.0.3/32` |
-| Allowed IPs | `10.10.0.0/24, <HAUPT-LAN>` |
-| Extra Allowed IPs | *(leer lassen)* |
-| Use server DNS | ☐ |
-| Enable after creation | ✅ |
+| Feld | Wert | Erklärung |
+|------|------|-----------|
+| Name | `OPNsense-Hauptwohnsitz` | — |
+| Email | *(leer lassen)* | — |
+| IP Allocation | `10.10.0.3/32` | VPN-IP der OPNsense |
+| Allowed IPs | `10.10.0.0/24, <NEBEN-LAN>` | Was OPNsense durch den Tunnel routen soll → VPN-Netz + **Neben**-LAN |
+| Extra Allowed IPs | `<HAUPT-LAN>` | Damit der Raspi-Server Traffic ins Haupt-LAN zurück zu OPNsense routet |
+| Use server DNS | ☐ | — |
+| Enable after creation | ✅ | — |
 
 → **Submit**
+
+> **Wichtig — Allowed IPs Logik:**
+> - `Allowed IPs` → erscheint in der herunterladbaren `.conf` unter `[Peer] AllowedIPs` → steuert was OPNsense in den Tunnel schickt → muss das **Neben-LAN** enthalten
+> - `Extra Allowed IPs` → wird in die Server-seitige `wg0.conf` eingetragen → steuert was der Raspi-Server zu OPNsense routet → muss das **Haupt-LAN** enthalten
 
 ---
 
