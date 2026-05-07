@@ -1,7 +1,10 @@
 # GitHub Sponsors & Unterstützungsmöglichkeiten
 # Dokumentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
 
-github: ReXx09
+# HINWEIS: "github: ReXx09" funktioniert erst nach Genehmigung durch das GitHub Sponsors Programm.
+# Solange kannst du eine der folgenden Alternativen aktivieren:
+
+# github: ReXx09
 
 # Weitere Plattformen (auskommentiert — bei Bedarf aktivieren):
 # ko_fi: dein-ko-fi-name

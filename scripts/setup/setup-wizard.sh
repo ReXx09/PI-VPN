@@ -109,6 +109,7 @@ echo -e "${NC}"
 echo -e "  ${BOLD}Site-to-Site WireGuard Setup-Wizard${NC}"
 echo -e "  ${DIM}Nebenwohnsitz — Raspberry Pi — wireguard-ui + ddns-go${NC}"
 echo ""
+echo -e "  ${DIM}© 2026 Bocki — MIT License — https://github.com/ReXx09/PI-VPN${NC}"
 divider
 echo ""
 echo -e "  Dieser Wizard richtet deinen Raspberry Pi als WireGuard-${BOLD}Server${NC}"
@@ -293,8 +294,11 @@ echo -e "  ${DIM}Wird für die iptables MASQUERADE-Regel benötigt,${NC}"
 echo -e "  ${DIM}damit alle Geräte in der Fritzbox den VPN-Tunnel nutzen können.${NC}"
 echo ""
 
-ask "LAN-Subnetz am Nebenwohnsitz:" "" LAN_SUBNET
-[[ -z "$LAN_SUBNET" ]] && { warn "LAN-Subnetz muss angegeben werden!"; exit 1; }
+while true; do
+    ask "LAN-Subnetz am Nebenwohnsitz:" "192.168.178.0/24" LAN_SUBNET
+    [[ -n "$LAN_SUBNET" ]] && break
+    warn "LAN-Subnetz darf nicht leer sein — bitte eingeben (z.B. 192.168.178.0/24)"
+done
 ok "LAN-Subnetz: $LAN_SUBNET"
 
 blank
@@ -312,7 +316,7 @@ ok "Interface: $LAN_IFACE"
 # ═════════════════════════════════════════════════════════════════════════════
 # SCHRITT 5 — DDNS KONFIGURATION
 # ═════════════════════════════════════════════════════════════════════════════
-step "5 von 7 — DDNS (optional)"
+step "5 von 7 — DDNS"
 divider
 echo ""
 echo -e "  ${BOLD}ddns-go${NC} hält automatisch einen ${BOLD}AAAA-Record${NC} mit der aktuellen"
@@ -322,22 +326,15 @@ echo -e "  ${DIM}Nützlich wenn OPNsense Firewall-Regeln auf die Client-IPv6${NC
 echo -e "  ${DIM}matchen soll, oder wenn der Raspi selbst als Endpoint dient.${NC}"
 echo ""
 
-SETUP_DDNS=false
-if ask_yn "DDNS für diesen Raspberry Pi einrichten?"; then
-    SETUP_DDNS=true
-
-    blank
-    echo -e "  ${BOLD}DDNS-Provider${NC}"
-    echo -e "  ${DIM}Unterstützt werden u.a.: Cloudflare, DeSEC, Duck DNS, AliDNS, ...${NC}"
-    echo -e "  ${DIM}Vollständige Liste: https://github.com/jeessy2/ddns-go${NC}"
-    echo -e "  ${DIM}→ Konfiguration erfolgt nach dem Start über die WebUI (Port 9876).${NC}"
-    echo ""
-    warn "DDNS-Konfiguration (API-Token, Domain, Provider) findet nach dem"
-    warn "Container-Start in der ddns-go WebUI statt: http://${RASPI_IP}:9876"
-else
-    info "DDNS übersprungen. Container wird trotzdem gestartet."
-    info "Konfiguration jederzeit über http://${RASPI_IP}:9876 möglich."
-fi
+SETUP_DDNS=true
+blank
+echo -e "  ${BOLD}DDNS-Konfiguration${NC}"
+echo -e "  ${DIM}ddns-go wird mitgestartet. Provider, API-Token und Domain${NC}"
+echo -e "  ${DIM}konfigurierst du nach dem Start in der WebUI:${NC}"
+echo ""
+info "http://${RASPI_IP}:9876"
+echo -e "  ${DIM}Unterstützte Provider: Cloudflare, DeSEC, Duck DNS, AliDNS, ...${NC}"
+echo -e "  ${DIM}Vollständige Liste: https://github.com/jeessy2/ddns-go${NC}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -400,10 +397,9 @@ WGUI_CONFIG_FILE_PATH=/etc/wireguard/wg0.conf
 WGUI_MANAGE_START=true
 WGUI_MANAGE_RESTART=true
 
-# Routing: LAN-Subnetz Nebenwohnsitz (${LAN_SUBNET}) über wg0
-# Wird in der wireguard-ui WebUI unter PostUp/PostDown eingetragen:
-# PostUp:   ${POSTUP}
-# PostDown: ${POSTDOWN}
+# iptables-Regeln für WireGuard-Routing (automatisch via wireguard-ui env)
+WGUI_POST_UP=${POSTUP}
+WGUI_POST_DOWN=${POSTDOWN}
 LAN_SUBNET=${LAN_SUBNET}
 LAN_IFACE=${LAN_IFACE}
 ENVFILE
@@ -458,10 +454,7 @@ echo -e "     • Server Address  : ${WGUI_SERVER_ADDR}"
 echo -e "     • Listen Port     : 51820"
 echo -e "     • MTU             : ${WGUI_MTU}"
 echo -e "     • DNS             : ${WGUI_DNS}"
-echo -e "     • Post Up         :"
-echo -e "       ${DIM}${POSTUP}${NC}"
-echo -e "     • Post Down       :"
-echo -e "       ${DIM}${POSTDOWN}${NC}"
+echo -e "     • Post Up/Down    : ${DIM}automatisch aus .env gesetzt${NC}"
 echo -e "     → ${BOLD}\"Save\"${NC} klicken"
 echo ""
 echo -e "  ${CYAN}3.${NC} ${BOLD}\"Wireguard Clients\"${NC} → ${BOLD}\"+New Client\"${NC} (= OPNsense als Peer eintragen):"

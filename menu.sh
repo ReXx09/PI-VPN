@@ -123,6 +123,11 @@ raspi_ip() {
     hostname -I 2>/dev/null | awk '{print $1}' || echo "?.?.?.?"
 }
 
+vpn_peer_ip() {
+    # Erste konfigurierte Peer-IP aus wg0 (z.B. OPNsense)
+    wg show wg0 allowed-ips 2>/dev/null | awk '{print $2}' | cut -d'/' -f1 | grep -v '^$' | head -1
+}
+
 # =============================================================================
 # WHIPTAIL — Grafisches TUI-Menü
 # =============================================================================
@@ -360,13 +365,12 @@ menu_config_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN -- Konfiguration & Updates" \
             --menu "\nWas soll bearbeitet werden?" \
-            20 68 7 \
+            20 68 6 \
             "1" "  .env-Datei bearbeiten              (nano)" \
             "2" "  docker-compose.yml anzeigen" \
             "3" "  Updates vom GitHub holen      (git pull)" \
             "4" "  WireGuard-Konfig anzeigen    (wg0.conf)" \
             "5" "  Raspberry Pi Systeminformationen" \
-            "6" "  WebUI-Adressen anzeigen" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -421,9 +425,6 @@ menu_config_wt() {
                 df -h / | tail -1 | awk '{printf "    gesamt: %s  frei: %s  verw.: %s\n", $2, $4, $5}'
                 echo -e "  ${CYAN}Docker:${NC}        $(docker --version 2>/dev/null || echo 'nicht installiert')"
                 press_enter
-                ;;
-            6)
-                show_webui_addresses_wt
                 ;;
             0|"") return ;;
         esac
@@ -480,7 +481,7 @@ menu_diag_wt() {
             "1" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "2" "  WireGuard Handshake prüfen" \
             "3" "  DNS-Auflösung testen  ($VPN_HOST)" \
-            "4" "  Ping VPN-Gateway  (10.10.0.1)" \
+            "4" "  Ping VPN-Peer     (aus wg0)" \
             "5" "  Ping Heimnetz-Gateway  ($HAUPT_GW)" \
             "6" "  IPv6-Adresse prüfen" \
             "7" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
@@ -550,11 +551,14 @@ menu_diag_wt() {
                 ;;
             4)
                 clear
-                echo -e "${BOLD}Ping VPN-Gateway (10.10.0.1):${NC}\n"
-                if ip link show wg0 &>/dev/null; then
-                    ping -c 4 -W 2 10.10.0.1 2>/dev/null \
-                        && echo -e "\n  ${GREEN}✔  VPN-Gateway erreichbar${NC}" \
-                        || echo -e "\n  ${RED}✘  VPN-Gateway nicht erreichbar — kein Tunnel?${NC}"
+                local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
+                if [[ -z "$PEER_IP" ]]; then
+                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
+                elif ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  VPN-Peer erreichbar — Tunnel aktiv${NC}" \
+                        || echo -e "\n  ${RED}✘  VPN-Peer nicht erreichbar — Tunnel unterbrochen?${NC}"
                 else
                     echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
                 fi
@@ -637,7 +641,12 @@ menu_diag_wt() {
                 # 3. Ping-Tests
                 echo -e "${CYAN}[3/4] Erreichbarkeit:${NC}"
                 if ip link show wg0 &>/dev/null; then
-                    ping -c 2 -W 1 10.10.0.1    &>/dev/null && echo -e "  VPN-GW 10.10.0.1: ${GREEN}✔ erreichbar${NC}" || echo -e "  VPN-GW 10.10.0.1: ${RED}✘ nicht erreichbar${NC}"
+                    local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                    if [[ -n "$PEER_IP" ]]; then
+                        ping -c 2 -W 1 "$PEER_IP"   &>/dev/null && echo -e "  VPN-Peer ${PEER_IP}: ${GREEN}✔ erreichbar${NC}" || echo -e "  VPN-Peer ${PEER_IP}: ${RED}✘ nicht erreichbar${NC}"
+                    else
+                        echo -e "  ${DIM}Kein Peer konfiguriert${NC}"
+                    fi
                     ping -c 2 -W 1 "$HAUPT_GW"  &>/dev/null && echo -e "  HW-GW ${HAUPT_GW}: ${GREEN}✔ erreichbar${NC}" || echo -e "  HW-GW ${HAUPT_GW}: ${RED}✘ nicht erreichbar${NC}"
                 else
                     echo -e "  ${DIM}wg0 nicht aktiv — Pings übersprungen${NC}"
@@ -662,7 +671,6 @@ menu_diag_wt() {
 # =============================================================================
 
 divider_text() { echo -e "  ${DIM}────────────────────────────────────────────────────────${NC}"; }
-blank()        { echo ""; }
 
 banner_text() {
     clear
@@ -846,7 +854,7 @@ text_diag() {
         echo -e "  ${BOLD}[1]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
         echo -e "  ${BOLD}[2]${NC}  WireGuard Handshake prüfen"
         echo -e "  ${BOLD}[3]${NC}  DNS-Auflösung testen  ($VPN_HOST)"
-        echo -e "  ${BOLD}[4]${NC}  Ping VPN-Gateway  (10.10.0.1)"
+        echo -e "  ${BOLD}[4]${NC}  Ping VPN-Peer  (aus wg0)"
         echo -e "  ${BOLD}[5]${NC}  Ping Heimnetz-Gateway  ($HAUPT_GW)"
         echo -e "  ${BOLD}[6]${NC}  IPv6-Adresse prüfen"
         echo -e "  ${BOLD}[7]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
@@ -903,12 +911,17 @@ text_diag() {
                 ;;
             4)
                 clear
-                echo -e "${BOLD}Ping 10.10.0.1 (VPN-Gateway):${NC}\n"
-                ip link show wg0 &>/dev/null \
-                    && { ping -c 4 -W 2 10.10.0.1 2>/dev/null \
+                local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
+                if [[ -z "$PEER_IP" ]]; then
+                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
+                elif ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
                         && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
-                        || echo -e "\n  ${RED}✘  Nicht erreichbar${NC}"; } \
-                    || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
                 press_enter
                 ;;
             5)
@@ -964,7 +977,12 @@ text_diag() {
                 fi
                 echo -e "\n${CYAN}[3/4] Erreichbarkeit:${NC}"
                 if ip link show wg0 &>/dev/null; then
-                    ping -c 2 -W 1 10.10.0.1    &>/dev/null && echo -e "  10.10.0.1: ${GREEN}✔${NC}" || echo -e "  10.10.0.1: ${RED}✘${NC}"
+                    local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                    if [[ -n "$PEER_IP" ]]; then
+                        ping -c 2 -W 1 "$PEER_IP"   &>/dev/null && echo -e "  VPN-Peer ${PEER_IP}: ${GREEN}✔${NC}" || echo -e "  VPN-Peer ${PEER_IP}: ${RED}✘${NC}"
+                    else
+                        echo -e "  ${DIM}Kein Peer konfiguriert${NC}"
+                    fi
                     ping -c 2 -W 1 "$HAUPT_GW"  &>/dev/null && echo -e "  ${HAUPT_GW}: ${GREEN}✔${NC}" || echo -e "  ${HAUPT_GW}: ${RED}✘${NC}"
                 else
                     echo -e "  ${DIM}wg0 nicht aktiv — übersprungen${NC}"

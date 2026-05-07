@@ -73,11 +73,13 @@ services:
       - WGUI_PASSWORD=${WGUI_PASSWORD}
 
       # --- WireGuard Interface (dieser Raspi als Server) ---
-      - WGUI_SERVER_INTERFACE_ADDRESSES=10.10.0.1/24
+      - WGUI_SERVER_INTERFACE_ADDRESSES=${WGUI_SERVER_INTERFACE_ADDRESSES:-10.10.0.1/24}
       - WGUI_SERVER_LISTEN_PORT=51820
       - WGUI_MTU=${WGUI_MTU:-1280}
       - WGUI_DNS=${WGUI_DNS:-1.1.1.1}
       - WGUI_PERSISTENT_KEEPALIVE=25
+      - WGUI_SERVER_POST_UP_SCRIPT=${WGUI_POST_UP:-}
+      - WGUI_SERVER_POST_DOWN_SCRIPT=${WGUI_POST_DOWN:-}
 
       # Konfigurationsdatei (wird von wireguard-ui verwaltet)
       - WGUI_CONFIG_FILE_PATH=/etc/wireguard/wg0.conf

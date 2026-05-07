@@ -241,3 +241,32 @@ Details → [docs/Setup-Anleitung.md](docs/Setup-Anleitung.md)
 - DDNS-Provider mit AAAA-Unterstützung (Cloudflare empfohlen)
   - Hauptwohnsitz: direkt in OPNsense unter Dienste → Dynamisches DNS
   - Nebenwohnsitz: ddns-go Container (optional)
+
+---
+
+## Projekt unterstützen
+
+PI-VPN ist ein privates Open-Source-Projekt, das in meiner Freizeit entwickelt und gepflegt wird.
+Wenn dir das Projekt geholfen hat, deinen Standorten ein funktionierendes VPN ohne öffentliche IPv4 zu geben — freue ich mich sehr über eine kleine Unterstützung! 🙌
+
+> **Hinweis:** Der offizielle „Sponsor"-Button von GitHub erscheint erst nach Genehmigung durch das **GitHub Sponsors Programm** (Bewerbung läuft). Bis dahin kannst du das Projekt auf folgenden Wegen unterstützen:
+
+### Wie du helfen kannst
+
+| Weg                    | Beschreibung                                                                 |
+|------------------------|------------------------------------------------------------------------------|
+| ⭐ **GitHub Star**      | Kostenlos & hilfreich — gibt dem Projekt Sichtbarkeit auf GitHub             |
+| 🍴 **Fork & Contribute**| Verbesserungen, Bugfixes oder neue Features als Pull Request einreichen      |
+| 🐛 **Issue melden**    | Fehler oder Verbesserungsvorschläge im [Issue-Tracker](https://github.com/ReXx09/PI-VPN/issues) melden |
+| 💬 **Weiterempfehlen** | Das Projekt in Foren, Reddit oder Discord teilen                             |
+
+### Warum deine Unterstützung wichtig ist
+
+- Entwicklung & Pflege kostet Zeit — jeder Stern motiviert weiter
+- Mehr Aufmerksamkeit → mehr Feedback → besseres Projekt für alle
+- Dieses Projekt löst ein reales Problem (CGNAT / DS-Lite) für viele Menschen
+
+---
+
+*'' Dies ist ein persönliches Projekt und für hilfreiche Tipps und Ideen natürlich offen ''*
+*'' Ich weiß um die Problematik mit CG-NAT und DS-Lite und hoffe, mit diesem Projekt euch etwas helfen zu können ''*
