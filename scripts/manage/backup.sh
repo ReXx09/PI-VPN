@@ -3,6 +3,9 @@
 # backup.sh — Konfigurationsbackup für PI-VPN
 # Sichert WireGuard-Konfigs, DB und .env-Dateien (OHNE private Schlüssel im Namen)
 # Ausführen als: sudo bash scripts/manage/backup.sh
+#
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
 # =============================================================================
 
 set -euo pipefail

@@ -3,7 +3,9 @@
 # PI-VPN Reset / Deinstallation
 # Setzt den Raspberry Pi (Nebenwohnsitz) vollständig zurück
 #
-# Ausführen als: sudo bash scripts/manage/reset.sh
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
+#
 #
 # Was dieses Skript erledigt — interaktiv wählbar:
 #   1.  WireGuard-Tunnel (wg0) sofort trennen
@@ -75,6 +77,8 @@ echo "  ╚═╝  ╚═╝╚══════╝╚══════╝╚�
 echo -e "${NC}"
 echo -e "  ${BOLD}PI-VPN Reset / Deinstallation${NC}"
 echo -e "  ${DIM}Raspberry Pi — Nebenwohnsitz${NC}"
+echo ""
+echo -e "  ${DIM}© 2026 Bocki — MIT License — https://github.com/ReXx09/PI-VPN${NC}"
 blank
 divider
 blank

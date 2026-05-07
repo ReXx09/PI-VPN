@@ -2,6 +2,9 @@
 # =============================================================================
 # status.sh — VPN-Status und Systeminformationen anzeigen
 # Ausführen als: sudo bash scripts/manage/status.sh
+#
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
 # =============================================================================
 
 set -euo pipefail

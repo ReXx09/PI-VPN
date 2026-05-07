@@ -4,6 +4,9 @@
 # Erstellt Verzeichnisstruktur, .env-Dateien und .gitignore
 # Ausführen als: sudo bash scripts/setup/init.sh
 # (Alternativ: setup-wizard.sh übernimmt diese Schritte automatisch)
+#
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
 # =============================================================================
 
 set -euo pipefail

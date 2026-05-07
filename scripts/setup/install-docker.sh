@@ -2,6 +2,9 @@
 # =============================================================================
 # install-docker.sh — Docker CE auf Raspberry Pi OS Bookworm installieren
 # Ausführen als: sudo bash scripts/setup/install-docker.sh
+#
+# Copyright (c) 2026 Bocki — MIT License
+# https://github.com/ReXx09/PI-VPN
 # =============================================================================
 
 set -euo pipefail
