@@ -1005,11 +1005,19 @@ main_menu_text() {
 # ─── Untermenü: Backup & Wiederherstellen (whiptail) ─────────────────────────
 menu_backup_wt() {
     while true; do
+        # Nextcloud-Status für Menübeschriftung
+        local NC_HINT="nicht konfiguriert"
+        if [[ -f "$ENV_FILE" ]]; then
+            local _NC_URL
+            _NC_URL=$(grep -E '^NC_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
+            [[ -n "$_NC_URL" ]] && NC_HINT="aktiv: $_NC_URL"
+        fi
+
         local CHOICE
         CHOICE=$(whiptail \
             --title "PI-VPN | Backup & Wiederherstellen" \
-            --menu "\nWas möchtest du tun?" \
-            16 68 3 \
+            --menu "\nNextcloud-Export: ${NC_HINT}\n(konfigurieren: Menü 4 → .env bearbeiten)\n\nWas möchtest du tun?" \
+            18 72 3 \
             "1" "  Backup erstellen        (backup.sh)" \
             "2" "  Backup wiederherstellen (restore.sh)" \
             "0" "  ← Zurück zum Hauptmenü" \
@@ -1028,6 +1036,16 @@ text_backup() {
     while true; do
         clear; blank
         echo -e "  ${BOLD}[BACKUP] Backup & Wiederherstellen${NC}"; blank
+        # Nextcloud-Status anzeigen
+        local _NC_URL
+        _NC_URL=$(grep -E '^NC_URL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+        if [[ -n "$_NC_URL" ]]; then
+            echo -e "  ${GREEN}Nextcloud-Export:${NC}  ${_NC_URL}"
+        else
+            echo -e "  ${DIM}Nextcloud-Export:  nicht konfiguriert${NC}"
+            echo -e "  ${DIM}→ Menü 4 → .env bearbeiten → NC_URL / NC_USER / NC_PASS setzen${NC}"
+        fi
+        blank
         echo -e "  ${BOLD}[1]${NC}  Backup erstellen        (backup.sh)"
         echo -e "  ${BOLD}[2]${NC}  Backup wiederherstellen (restore.sh)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
