@@ -176,10 +176,11 @@ menu_setup_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Setup & Installation" \
             --menu "\nWelche Aktion soll ausgeführt werden?" \
-            18 68 5 \
+            20 68 6 \
             "1" "  Vollständige Installation  (setup-wizard.sh)" \
             "2" "  Nur Docker CE installieren (install-docker.sh)" \
             "3" "  Verzeichnisse anlegen       (init.sh)" \
+            "4" "  Dashboard nachinstallieren  (install-dashboard.sh)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -197,6 +198,11 @@ menu_setup_wt() {
             3)
                 clear
                 bash "$SETUP_DIR/init.sh"
+                press_enter
+                ;;
+            4)
+                clear
+                bash "$SETUP_DIR/install-dashboard.sh"
                 press_enter
                 ;;
             0|"") return ;;
@@ -1005,6 +1011,7 @@ text_setup() {
         echo -e "  ${BOLD}[1]${NC}  Vollständige Installation  (setup-wizard.sh)"
         echo -e "  ${BOLD}[2]${NC}  Nur Docker CE installieren (install-docker.sh)"
         echo -e "  ${BOLD}[3]${NC}  Verzeichnisse anlegen      (init.sh)"
+        echo -e "  ${BOLD}[4]${NC}  Dashboard nachinstallieren (install-dashboard.sh)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
@@ -1012,6 +1019,7 @@ text_setup() {
             1) clear; bash "$SETUP_DIR/setup-wizard.sh"; press_enter ;;
             2) clear; bash "$SETUP_DIR/install-docker.sh"; press_enter ;;
             3) clear; bash "$SETUP_DIR/init.sh"; press_enter ;;
+            4) clear; bash "$SETUP_DIR/install-dashboard.sh"; press_enter ;;
             0|"") return ;;
         esac
     done
