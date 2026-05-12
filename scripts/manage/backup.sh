@@ -16,6 +16,12 @@ BACKUP_DIR="$PROJECT_ROOT/backups"
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_FILE="$BACKUP_DIR/pi-vpn-backup_$TIMESTAMP.tar.gz"
 
+# ─── Export-Verzeichnis (für den pi-User erreichbar, z.B. via SFTP) ──────────
+# /opt ist root-only → Backup hier hin kopieren damit FileZilla etc. es lesen kann
+EXPORT_DIR="/home/pi/pi-vpn-backup"
+# Alternativer User falls kein "pi" existiert
+EXPORT_USER="${SUDO_USER:-pi}"
+
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
@@ -61,10 +67,29 @@ ls -t "$BACKUP_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null \
 BACKUP_COUNT=$(ls "$BACKUP_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null | wc -l)
 info "Vorhandene Backups: $BACKUP_COUNT"
 
+# ─── Export-Kopie für SFTP-Zugriff (pi-User / FileZilla) ─────────────────────
+# /opt/pi-vpn/backups/ ist root-only → Kopie nach /home/pi/pi-vpn-backup/
+# damit der pi-User die Datei per SFTP/FileZilla herunterladen kann.
+mkdir -p "$EXPORT_DIR"
+chmod 755 "$EXPORT_DIR"
+chown "${EXPORT_USER}:${EXPORT_USER}" "$EXPORT_DIR" 2>/dev/null || true
+
+EXPORT_FILE="$EXPORT_DIR/pi-vpn-backup_${TIMESTAMP}.tar.gz"
+cp "$BACKUP_FILE" "$EXPORT_FILE"
+chmod 640 "$EXPORT_FILE"
+chown "${EXPORT_USER}:${EXPORT_USER}" "$EXPORT_FILE" 2>/dev/null || true
+
+# Alte Exporte aufräumen (behalte letzte 10)
+ls -t "$EXPORT_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null \
+    | tail -n +11 \
+    | xargs -r rm --
+
 echo ""
 info "Backup abgeschlossen!"
 warn "SICHERHEITSHINWEIS: Das Backup enthält private WireGuard-Schlüssel."
-warn "Backup-Verzeichnis: $BACKUP_DIR (Berechtigungen: 700)"
+warn "Backup-Verzeichnis (root):      $BACKUP_DIR"
+info "Kopie für SFTP-Download:        $EXPORT_FILE"
+info "SFTP-Pfad (FileZilla/WinSCP):   /home/${EXPORT_USER}/pi-vpn-backup/"
 echo ""
 echo "Backup wiederherstellen:"
 echo "  tar -xzf $BACKUP_FILE -C $PROJECT_ROOT"
