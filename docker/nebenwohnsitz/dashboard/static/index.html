@@ -270,8 +270,8 @@
 
   </div><!-- /g4 -->
 
-  <!-- Row 2: DDNS / IPv6 -->
-  <div class="g1">
+  <!-- Row 2: DDNS / IPv6 + Nextcloud Backup -->
+  <div class="g2">
     <div class="card">
       <div class="card-title">DDNS / IPv6</div>
       <div class="ddns-grid">
@@ -292,6 +292,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Nextcloud Backup -->
+    <div class="card">
+      <div class="card-title">Nextcloud Backup</div>
+      <div id="nc-status-wrap"><div class="skel">Lade…</div></div>
+    </div>
+
   </div>
 
   <!-- Row 3: Verbundene Peers -->
@@ -476,6 +483,26 @@
       };
       renderLog(d.logs?.['wireguard-ui'], 'log-wui');
       renderLog(d.logs?.['ddns-go'],      'log-ddns');
+
+      // ── Nextcloud ──
+      const nc  = d.nextcloud || {};
+      const ncw = el('nc-status-wrap');
+      if (!nc.configured) {
+        ncw.innerHTML = '<span class="c-muted" style="font-size:12px;line-height:1.6">Nicht konfiguriert —<br>NC_URL / NC_USER / NC_PASS in .env setzen</span>';
+      } else if (!nc.reachable) {
+        ncw.innerHTML =
+          `<div class="badge"><span class="dot dot-red"></span><span class="c-red">Nicht erreichbar</span></div>` +
+          `<div class="stat"><span class="stat-label">Fehler</span>` +
+          `<span class="stat-val c-red" style="font-size:11px">${esc(nc.error || '?')}</span></div>`;
+      } else {
+        const lb = nc.last_backup
+          ? `<span style="font-size:11px;color:var(--muted)">${esc(nc.last_backup)}</span>`
+          : '<span class="c-muted">—</span>';
+        ncw.innerHTML =
+          `<div class="badge"><span class="dot dot-green"></span><span class="c-green">Erreichbar</span></div>` +
+          `<div class="stat"><span class="stat-label">Backups in Ordner</span><span class="stat-val">${nc.backup_count ?? '—'}</span></div>` +
+          `<div class="stat"><span class="stat-label">Letztes Backup</span><span class="stat-val">${lb}</span></div>`;
+      }
 
     } catch (e) {
       el('conn-dot').className = 'conn-dot err';

@@ -198,6 +198,64 @@ def dns_aaaa(hostname):
     return lines[0] if lines else None
 
 
+# ── Daten-Collector: Nextcloud ────────────────────────────────────────────────
+
+def nextcloud_status():
+    """WebDAV PROPFIND auf den Backup-Ordner — listet Backup-Dateien."""
+    import urllib.request
+    import urllib.error
+    import base64
+    import xml.etree.ElementTree as ET
+    from urllib.parse import quote
+
+    nc_url  = os.environ.get("NC_URL",  "").rstrip("/")
+    nc_user = os.environ.get("NC_USER", "")
+    nc_pass = os.environ.get("NC_PASS", "")
+    nc_path = os.environ.get("NC_PATH", "/PI-VPN-Backups").lstrip("/")
+
+    if not (nc_url and nc_user and nc_pass):
+        return {"configured": False}
+
+    dav_url = (
+        f"{nc_url}/remote.php/dav/files/"
+        f"{quote(nc_user, safe='')}/{quote(nc_path, safe='/')}/"
+    )
+    req = urllib.request.Request(dav_url, method="PROPFIND")
+    creds = base64.b64encode(f"{nc_user}:{nc_pass}".encode()).decode()
+    req.add_header("Authorization", f"Basic {creds}")
+    req.add_header("Depth", "1")
+    req.add_header("Content-Type", "application/xml")
+
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return {"configured": True, "reachable": False, "error": f"HTTP {e.code}"}
+    except Exception as e:
+        return {"configured": True, "reachable": False, "error": str(e)[:80]}
+
+    try:
+        root = ET.fromstring(body)
+        ns   = {"d": "DAV:"}
+        files = []
+        for resp_el in root.findall("d:response", ns):
+            href = resp_el.findtext("d:href", namespaces=ns) or ""
+            if href.endswith("/"):
+                continue  # Ordner überspringen (Folder selbst + Unterordner)
+            name = href.split("/")[-1]
+            if name:
+                files.append(name)
+        files.sort(reverse=True)
+        return {
+            "configured":   True,
+            "reachable":    True,
+            "backup_count": len(files),
+            "last_backup":  files[0] if files else None,
+        }
+    except Exception:
+        return {"configured": True, "reachable": True, "backup_count": 0, "last_backup": None}
+
+
 # ── Flask-Routes ──────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -235,6 +293,7 @@ def status():
             "wireguard-ui": get_logs(client, "wireguard-ui"),
             "ddns-go":      get_logs(client, "ddns-go"),
         },
+        "nextcloud": nextcloud_status(),
     })
 
 

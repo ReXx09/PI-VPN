@@ -167,6 +167,11 @@ services:
     environment:
       # Gleiche Variable wie in menu.sh — wird für DDNS-Abgleich verwendet
       - VPN_HOST=${VPN_HOST:-}
+      # Nextcloud Backup-Status (optional — aus .env)
+      - NC_URL=${NC_URL:-}
+      - NC_USER=${NC_USER:-}
+      - NC_PASS=${NC_PASS:-}
+      - NC_PATH=${NC_PATH:-/PI-VPN-Backups}
 
     logging:
       driver: json-file
