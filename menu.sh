@@ -502,103 +502,6 @@ menu_diag_wt() {
             2)
                 clear
                 echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
-                if ! ip link show wg0 &>/dev/null; then
-                    echo -e "  ${RED}✘  wg0-Interface nicht aktiv.${NC}"
-                    echo -e "  ${DIM}→ Container starten: Menu 3 → Alle Container starten${NC}"
-                else
-                    wg show wg0 2>/dev/null
-                    echo ""
-                    local HS
-                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
-                    if [[ -n "$HS" && "$HS" != "0" ]]; then
-                        local AGO=$(( $(date +%s) - HS ))
-                        echo -e "  ${GREEN}✔  Letzter Handshake vor ${AGO}s${NC}"
-                        [[ $AGO -gt 180 ]] && echo -e "  ${YELLOW}⚠  Handshake älter als 3 Minuten — Verbindung möglicherweise unterbrochen${NC}"
-                    else
-                        echo -e "  ${RED}✘  Kein Handshake — Gegenstelle nicht verbunden${NC}"
-                        echo -e "  ${DIM}→ Prüfe: Endpoint, Firewall, Port 51820${NC}"
-                    fi
-                fi
-                press_enter
-                ;;
-            3)
-                clear
-                echo -e "${BOLD}DNS-Auflösung: ${VPN_HOST}${NC}\n"
-                if ! command -v dig &>/dev/null; then
-                    echo -e "  ${YELLOW}⚠  'dig' nicht installiert → Option 1 wählen${NC}"
-                else
-                    echo -e "  ${CYAN}A-Record (IPv4):${NC}"
-                    dig "$VPN_HOST" A +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
-                    echo ""
-                    echo -e "  ${CYAN}AAAA-Record (IPv6):${NC}"
-                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
-                    echo ""
-                    echo -e "  ${CYAN}Aktuelle IPv6 dieses Raspi:${NC}"
-                    ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}' || echo "    (nicht ermittelbar)"
-                fi
-                press_enter
-                ;;
-            4)
-                clear
-                local PEER_IP; PEER_IP=$(vpn_peer_ip)
-                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
-                if [[ -z "$PEER_IP" ]]; then
-                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
-                elif ip link show wg0 &>/dev/null; then
-                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
-                        && echo -e "\n  ${GREEN}✔  VPN-Peer erreichbar — Tunnel aktiv${NC}" \
-                        || echo -e "\n  ${RED}✘  VPN-Peer nicht erreichbar — Tunnel unterbrochen?${NC}"
-                else
-                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
-                fi
-                press_enter
-                ;;
-            5)
-                clear
-                echo -e "${BOLD}Ping Heimnetz-Gateway (${HAUPT_GW}):${NC}\n"
-                if ip link show wg0 &>/dev/null; then
-                    ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
-                        && echo -e "\n  ${GREEN}✔  Hauptwohnsitz-Gateway erreichbar${NC}" \
-                        || echo -e "\n  ${RED}✘  Nicht erreichbar — Routing oder iptables-Regeln prüfen${NC}"
-                else
-                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
-                fi
-                press_enter
-                ;;
-            6)
-                clear
-                echo -e "${BOLD}IPv6-Adresse dieses Raspi:${NC}\n"
-                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | while read -r line; do
-                    echo "  $line"
-                done
-                echo ""
-                echo -e "  ${CYAN}Öffentliche IPv6 (extern):${NC}"
-                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' \
-                    || echo -e "    ${YELLOW}⚠  Kein IPv6-Internet erreichbar${NC}"
-                echo ""
-                echo -e "  ${CYAN}AAAA in DNS (${VPN_HOST}):${NC}"
-                if command -v dig &>/dev/null; then
-                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (nicht auflösbar)"
-                else
-                    echo -e "    ${DIM}dig nicht installiert → Option 1${NC}"
-                fi
-                press_enter
-                ;;
-            7)
-                clear
-                if ! command -v tcpdump &>/dev/null; then
-                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert.${NC}"
-                    echo -e "  ${DIM}→ Option 1 wählen um Tools zu installieren${NC}"
-                else
-                    echo -e "${BOLD}tcpdump — lausche auf UDP Port 51820 (eth0)${NC}"
-                    echo -e "${DIM}Aktiviere jetzt WireGuard auf dem Gegenstück. Ctrl+C zum Beenden.${NC}\n"
-                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
-                fi
-                press_enter
-                ;;
-            8)
-                clear
-                echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
                 # 1. wg show
                 echo -e "${CYAN}[1/4] WireGuard Status:${NC}"
                 if ip link show wg0 &>/dev/null; then
@@ -624,7 +527,7 @@ menu_diag_wt() {
                     [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
                     [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
                 else
-                    echo -e "  ${DIM}dig nicht installiert → Option 1${NC}"
+                    echo -e "  ${DIM}dig nicht installiert → Option 9${NC}"
                 fi
                 echo ""
                 # 3. Ping-Tests

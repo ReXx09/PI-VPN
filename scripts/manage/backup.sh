@@ -35,6 +35,7 @@ fi
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
@@ -148,7 +149,7 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
 
         COUNT=0
         while IFS= read -r REMOTE_FILE; do
-            (( COUNT++ ))
+            (( ++COUNT ))
             if [[ $COUNT -gt 10 ]]; then
                 DEL_URL="${NC_URL%/}${REMOTE_FILE}"
                 HTTP_DEL=$(curl -s -o /dev/null -w "%{http_code}" \
