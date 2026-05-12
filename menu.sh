@@ -461,13 +461,14 @@ show_webui_addresses_wt() {
         --title "PI-VPN | WebUI-Adressen" \
         --msgbox \
         "  Adressen im lokalen Netzwerk des Nebenwohnsitzes:\n\n\
-  wireguard-ui  →  http://${IP}:5000\n\n\
-  ddns-go       →  http://${IP}:9876\n\n\
+  wireguard-ui  →  http://${IP}:5000\n\
+  ddns-go       →  http://${IP}:9876\n\
+  Dashboard     →  http://${IP}:8080\n\n\
   ──────────────────────────────────────────────\n\
   Standard-Login wireguard-ui:\n\
     Benutzer:  admin  (oder .env: WGUI_USERNAME)\n\
     Passwort:  aus .env: WGUI_PASSWORD" \
-        18 64
+        19 64
 }
 
 # ─── Untermenü: Diagnose & Tools ─────────────────────────────────────────────
@@ -987,6 +988,7 @@ main_menu_text() {
                 blank
                 echo -e "  ${BOLD}wireguard-ui:${NC}  http://$(raspi_ip):5000"
                 echo -e "  ${BOLD}ddns-go:${NC}       http://$(raspi_ip):9876"
+                echo -e "  ${BOLD}Dashboard:${NC}     http://$(raspi_ip):8080"
                 press_enter
                 ;;
             7) text_diag ;;

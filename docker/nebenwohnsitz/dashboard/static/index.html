@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PI-VPN Dashboard</title>
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --card:    #161b22;
+      --card2:   #1c2128;
+      --border:  #30363d;
+      --text:    #c9d1d9;
+      --muted:   #8b949e;
+      --green:   #3fb950;
+      --yellow:  #e3b341;
+      --red:     #f85149;
+      --blue:    #58a6ff;
+      --orange:  #f0883e;
+      --purple:  #bc8cff;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .hdr-left  { display: flex; align-items: center; gap: 10px; }
+    .hdr-title { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
+    .hdr-host  { color: var(--blue); font-size: 13px; font-family: monospace; }
+    .hdr-right { display: flex; align-items: center; gap: 18px; font-size: 12px; color: var(--muted); }
+
+    .conn-wrap { display: flex; align-items: center; gap: 6px; }
+    .conn-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .conn-dot.ok  { background: var(--green); animation: glow 2s ease-in-out infinite; }
+    .conn-dot.err { background: var(--red); }
+    @keyframes glow { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+    /* ── Layout ── */
+    .main  { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+    .g4    { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 14px; }
+    .g2    { display: grid; grid-template-columns: 1fr 1fr;       gap: 14px; margin-bottom: 14px; }
+    .g1    { margin-bottom: 14px; }
+    @media (max-width: 960px) { .g4 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .g4, .g2 { grid-template-columns: 1fr; } }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .card-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Status Badge ── */
+    .badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+    .dot   { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green  { background: var(--green);  box-shadow: 0 0 7px var(--green); }
+    .dot-red    { background: var(--red);    box-shadow: 0 0 7px var(--red);   }
+    .dot-yellow { background: var(--yellow); box-shadow: 0 0 7px var(--yellow);}
+    .dot-gray   { background: var(--muted);  }
+
+    /* ── Stat Row ── */
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 9px;
+      font-size: 12px;
+    }
+    .stat-label { color: var(--muted); }
+    .stat-val   { font-family: monospace; }
+
+    /* ── Progress Bar ── */
+    .bar-wrap  { height: 5px; background: #21262d; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 3px; background: var(--green); transition: width .5s ease; }
+    .bar-fill.warn { background: var(--yellow); }
+    .bar-fill.crit { background: var(--red);    }
+    .bar-label { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+
+    /* ── DDNS Row ── */
+    .ddns-grid { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 6px; }
+    .ddns-cell { }
+    .ddns-key  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
+    .ddns-val  { font-family: monospace; font-size: 13px; }
+
+    .match-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+    }
+    .match-ok   { background: #122622; color: var(--green);  border: 1px solid #1a3d2a; }
+    .match-fail { background: #2d1217; color: var(--red);    border: 1px solid #4a1a1a; }
+    .match-unk  { background: #21262d; color: var(--muted);  border: 1px solid var(--border); }
+
+    /* ── Table ── */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl thead th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: var(--muted);
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tbl tbody tr { border-bottom: 1px solid #21262d; }
+    .tbl tbody tr:last-child { border: none; }
+    .tbl tbody td { padding: 10px 10px; font-size: 13px; }
+    .mono { font-family: monospace; }
+
+    /* ── Log Box ── */
+    .log-box {
+      background: #010409;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 11.5px;
+      line-height: 1.55;
+      overflow-y: auto;
+      max-height: 260px;
+    }
+    .log-ok   { color: #7ee787; }
+    .log-warn { color: var(--yellow); }
+    .log-err  { color: var(--red);    }
+    .log-dim  { color: var(--muted);  }
+
+    /* ── Containers row ── */
+    .ctrs { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+    .ctr-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; flex: 1; min-width: 130px;
+    }
+    .ctr-name  { font-weight: 600; font-size: 13px; }
+    .ctr-meta  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    /* ── Helpers ── */
+    .c-green  { color: var(--green);  }
+    .c-red    { color: var(--red);    }
+    .c-yellow { color: var(--yellow); }
+    .c-blue   { color: var(--blue);   }
+    .c-orange { color: var(--orange); }
+    .c-muted  { color: var(--muted);  }
+    .empty    { text-align: center; padding: 28px 0; color: var(--muted); font-size: 13px; }
+
+    /* ── Skeleton ── */
+    .skel { color: var(--muted); font-style: italic; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="hdr">
+  <div class="hdr-left">
+    <span style="font-size:22px">🔒</span>
+    <span class="hdr-title">PI-VPN Dashboard</span>
+    <span class="hdr-host" id="hdr-host">—</span>
+  </div>
+  <div class="hdr-right">
+    <div class="conn-wrap">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-text">Verbinde…</span>
+    </div>
+    <span id="hdr-updated">—</span>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- Row 1: Vier Status-Karten -->
+  <div class="g4">
+
+    <!-- VPN -->
+    <div class="card">
+      <div class="card-title">WireGuard VPN</div>
+      <div class="badge" id="vpn-badge"><span class="dot dot-gray"></span><span class="skel">Lade…</span></div>
+      <div class="stat"><span class="stat-label">Aktive Peers</span>   <span class="stat-val" id="vpn-peers">—</span></div>
+      <div class="stat"><span class="stat-label">Letzter Handshake</span><span class="stat-val" id="vpn-hs">—</span></div>
+      <div class="stat"><span class="stat-label">Traffic ↓↑</span>     <span class="stat-val" id="vpn-traffic">—</span></div>
+    </div>
+
+    <!-- wireguard-ui -->
+    <div class="card">
+      <div class="card-title">wireguard-ui</div>
+      <div class="badge" id="wui-badge"><span class="dot dot-gray"></span><span class="skel">Lade…</span></div>
+      <div class="stat"><span class="stat-label">Status</span>    <span class="stat-val" id="wui-status">—</span></div>
+      <div class="stat"><span class="stat-label">Neustarts</span> <span class="stat-val" id="wui-rst">—</span></div>
+      <div class="stat"><span class="stat-label">Port</span>      <span class="stat-val c-muted">5000</span></div>
+    </div>
+
+    <!-- ddns-go -->
+    <div class="card">
+      <div class="card-title">ddns-go</div>
+      <div class="badge" id="ddns-badge"><span class="dot dot-gray"></span><span class="skel">Lade…</span></div>
+      <div class="stat"><span class="stat-label">Status</span>    <span class="stat-val" id="ddns-ctr-status">—</span></div>
+      <div class="stat"><span class="stat-label">Neustarts</span> <span class="stat-val" id="ddns-rst">—</span></div>
+      <div class="stat"><span class="stat-label">Port</span>      <span class="stat-val c-muted">9876</span></div>
+    </div>
+
+    <!-- System -->
+    <div class="card">
+      <div class="card-title">System</div>
+      <div class="stat" style="margin-top:0"><span class="stat-label">Uptime</span>       <span class="stat-val" id="sys-up">—</span></div>
+      <div class="stat">           <span class="stat-label">Load 1/5/15</span>  <span class="stat-val" id="sys-load">—</span></div>
+      <div class="stat">           <span class="stat-label">Temperatur</span>   <span class="stat-val" id="sys-temp">—</span></div>
+
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+          <span>RAM</span><span id="ram-lbl">—</span>
+        </div>
+        <div class="bar-wrap"><div class="bar-fill" id="ram-bar" style="width:0"></div></div>
+      </div>
+      <div style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+          <span>Disk</span><span id="disk-lbl">—</span>
+        </div>
+        <div class="bar-wrap"><div class="bar-fill" id="disk-bar" style="width:0"></div></div>
+      </div>
+    </div>
+
+  </div><!-- /g4 -->
+
+  <!-- Row 2: DDNS / IPv6 -->
+  <div class="g1">
+    <div class="card">
+      <div class="card-title">DDNS / IPv6</div>
+      <div class="ddns-grid">
+        <div class="ddns-cell">
+          <div class="ddns-key">Hostname</div>
+          <div class="ddns-val c-blue" id="ddns-host">—</div>
+        </div>
+        <div class="ddns-cell">
+          <div class="ddns-key">Aktuelle IPv6 (eth0)</div>
+          <div class="ddns-val" id="ddns-lip6">—</div>
+        </div>
+        <div class="ddns-cell">
+          <div class="ddns-key">DNS AAAA-Record</div>
+          <div class="ddns-val" id="ddns-dip6">—</div>
+        </div>
+        <div class="ddns-cell" style="display:flex;align-items:flex-end">
+          <span class="match-pill match-unk" id="ddns-match">?</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Verbundene Peers -->
+  <div class="g1">
+    <div class="card">
+      <div class="card-title">Verbundene Peers</div>
+      <div id="peers-wrap"><div class="skel">Lade…</div></div>
+    </div>
+  </div>
+
+  <!-- Row 4: Logs -->
+  <div class="g2">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:8px">wireguard-ui — Logs</div>
+      <div class="log-box" id="log-wui">Lade…</div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:8px">ddns-go — Logs</div>
+      <div class="log-box" id="log-ddns">Lade…</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const INTERVAL = 5000;
+  let lastTs = null;
+
+  // ── Hilfsfunktionen ────────────────────────────────────────────────────────
+
+  const el  = id => document.getElementById(id);
+  const set = (id, html) => { el(id).innerHTML = html; };
+
+  function fmtBytes(b) {
+    if (!b || b === 0) return '0 B';
+    const u = ['B','KB','MB','GB'], i = Math.min(3, Math.floor(Math.log(b) / Math.log(1024)));
+    return (b / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0) + ' ' + u[i];
+  }
+
+  function fmtAgo(s) {
+    if (s === null || s === undefined) return '<span class="c-muted">Kein Handshake</span>';
+    if (s < 60)   return `<span class="c-green">${s}s</span>`;
+    if (s < 300)  return `<span class="c-green">${Math.floor(s/60)}m ${s%60}s</span>`;
+    if (s < 3600) return `<span class="c-yellow">${Math.floor(s/60)}m</span>`;
+    return `<span class="c-red">${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m</span>`;
+  }
+
+  function statusBadge(running, label) {
+    if (running)
+      return `<span class="dot dot-green"></span><span class="c-green">${label}</span>`;
+    return `<span class="dot dot-red"></span><span class="c-red">Gestoppt</span>`;
+  }
+
+  function barClass(pct) {
+    if (pct >= 90) return 'crit';
+    if (pct >= 75) return 'warn';
+    return '';
+  }
+
+  function tempColor(t) {
+    if (t === null || t === undefined) return 'c-muted';
+    if (t >= 80) return 'c-red';
+    if (t >= 65) return 'c-orange';
+    if (t >= 50) return 'c-yellow';
+    return 'c-green';
+  }
+
+  function logClass(line) {
+    const l = line.toLowerCase();
+    if (/error|err |fail|401|403|panic/.test(l)) return 'log-err';
+    if (/warn|restart/.test(l))                  return 'log-warn';
+    return 'log-ok';
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Refresh ────────────────────────────────────────────────────────────────
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+
+      lastTs = d.timestamp;
+      el('conn-dot').className = 'conn-dot ok';
+      set('conn-text', 'Verbunden');
+      set('hdr-host', d.ddns?.hostname || '—');
+
+      // ── VPN ──
+      const vpnUp = d.vpn?.up;
+      const peers = d.vpn?.peers || [];
+      set('vpn-badge', statusBadge(vpnUp, vpnUp ? 'Aktiv (wg0 UP)' : 'wg0 DOWN'));
+      set('vpn-peers', peers.length);
+
+      const best = peers.length
+        ? peers.reduce((a,b)=>(a.handshake_ago??Infinity)<(b.handshake_ago??Infinity)?a:b)
+        : null;
+      set('vpn-hs', best ? fmtAgo(best.handshake_ago) : '<span class="c-muted">—</span>');
+
+      const totalRx = peers.reduce((s,p)=>s+(p.rx_bytes||0),0);
+      const totalTx = peers.reduce((s,p)=>s+(p.tx_bytes||0),0);
+      set('vpn-traffic', peers.length
+        ? `<span class="c-green">↓ ${fmtBytes(totalRx)}</span> <span class="c-blue">↑ ${fmtBytes(totalTx)}</span>`
+        : '<span class="c-muted">—</span>');
+
+      // ── Container ──
+      const wui  = d.containers?.['wireguard-ui'] || {};
+      const ddnsc = d.containers?.['ddns-go']     || {};
+      set('wui-badge',  statusBadge(wui.running,   'Läuft'));
+      set('wui-status', wui.status  || '—');
+      const wuiRst = wui.restart_count ?? '—';
+      set('wui-rst', wuiRst > 5 ? `<span class="c-yellow">${wuiRst}</span>` : wuiRst);
+
+      set('ddns-badge',      statusBadge(ddnsc.running, 'Läuft'));
+      set('ddns-ctr-status', ddnsc.status || '—');
+      const ddnsRst = ddnsc.restart_count ?? '—';
+      set('ddns-rst', ddnsRst > 5 ? `<span class="c-yellow">${ddnsRst}</span>` : ddnsRst);
+
+      // ── System ──
+      const s = d.system || {};
+      set('sys-up',   s.uptime || '?');
+      set('sys-load', s.load ? s.load.join(' / ') : '?');
+      const tc = tempColor(s.temp_celsius);
+      set('sys-temp', s.temp_celsius != null
+        ? `<span class="${tc}">${s.temp_celsius}°C</span>`
+        : '<span class="c-muted">—</span>');
+
+      const rp = s.ram_percent || 0;
+      el('ram-bar').style.width = rp + '%';
+      el('ram-bar').className   = 'bar-fill ' + barClass(rp);
+      set('ram-lbl', `${s.ram_used_mb||0} MB / ${s.ram_total_mb||0} MB`);
+
+      const dp = s.disk_percent || 0;
+      el('disk-bar').style.width = dp + '%';
+      el('disk-bar').className   = 'bar-fill ' + barClass(dp);
+      set('disk-lbl', dp + '%');
+
+      // ── DDNS ──
+      const dn = d.ddns || {};
+      set('ddns-host', dn.hostname || '—');
+      set('ddns-lip6', dn.local_ipv6 || '<span class="c-red">Keine IPv6</span>');
+      set('ddns-dip6', dn.dns_ipv6  || '<span class="c-muted">—</span>');
+      const mb = el('ddns-match');
+      if (dn.match === true)  { mb.className='match-pill match-ok';   mb.innerHTML='✔ DNS aktuell'; }
+      else if (dn.match===false){ mb.className='match-pill match-fail'; mb.innerHTML='✘ DNS veraltet!'; }
+      else                    { mb.className='match-pill match-unk';  mb.textContent='? Unbekannt'; }
+
+      // ── Peers-Tabelle ──
+      const pw = el('peers-wrap');
+      if (peers.length === 0) {
+        pw.innerHTML = '<div class="empty">Keine aktiven Peers — Tunnel noch nicht verbunden oder keine Peers konfiguriert</div>';
+      } else {
+        const rows = peers.map(p => `
+          <tr>
+            <td class="mono" style="font-size:11px;color:var(--muted)">${esc(p.public_key_short)}</td>
+            <td class="mono c-blue">${esc(p.allowed_ips)}</td>
+            <td class="mono" style="font-size:11px;color:var(--muted)">${p.endpoint ? esc(p.endpoint) : '—'}</td>
+            <td>${fmtAgo(p.handshake_ago)}</td>
+            <td class="c-green">↓ ${fmtBytes(p.rx_bytes)}</td>
+            <td class="c-blue">↑ ${fmtBytes(p.tx_bytes)}</td>
+          </tr>`).join('');
+        pw.innerHTML = `
+          <table class="tbl">
+            <thead><tr>
+              <th>Public Key</th><th>Allowed IPs</th><th>Endpoint</th>
+              <th>Handshake</th><th>Empfangen</th><th>Gesendet</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
+      // ── Logs ──
+      const renderLog = (lines, id) => {
+        if (!lines?.length) { set(id, '<span class="log-dim">(leer)</span>'); return; }
+        el(id).innerHTML = lines.map(l =>
+          `<div class="${logClass(l)}">${esc(l)}</div>`
+        ).join('');
+        el(id).scrollTop = el(id).scrollHeight;
+      };
+      renderLog(d.logs?.['wireguard-ui'], 'log-wui');
+      renderLog(d.logs?.['ddns-go'],      'log-ddns');
+
+    } catch (e) {
+      el('conn-dot').className = 'conn-dot err';
+      set('conn-text', 'Verbindungsfehler');
+    }
+  }
+
+  // ── Zeitstempel-Anzeige ────────────────────────────────────────────────────
+  function tick() {
+    if (lastTs !== null) {
+      const ago = Math.floor(Date.now() / 1000 - lastTs);
+      el('hdr-updated').textContent = `Aktualisiert vor ${ago}s`;
+    }
+  }
+
+  // ── Start ──────────────────────────────────────────────────────────────────
+  refresh();
+  setInterval(refresh, INTERVAL);
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>

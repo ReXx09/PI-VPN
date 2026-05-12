@@ -128,3 +128,48 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Dashboard
+  # Echtzeit-Web-Überwachung: http://<raspi-ip>:8080
+  #
+  # Zeigt live (alle 5s):
+  #   - WireGuard VPN-Status, Peers, Traffic, Handshake-Alter
+  #   - Container-Status (wireguard-ui, ddns-go) inkl. Restart-Counter
+  #   - DDNS / IPv6-Abgleich (eth0 vs. Cloudflare AAAA-Record)
+  #   - System-Metriken: RAM, Disk, CPU-Temperatur, Load, Uptime
+  #   - Live-Logs beider Container
+  #
+  # Erststart: docker compose build dashboard && docker compose up -d dashboard
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build: ./dashboard
+    image: pi-vpn-dashboard:latest
+    container_name: dashboard
+    restart: unless-stopped
+
+    # Host-Netz: gleicher Kontext wie wireguard-ui, kein extra Port-Mapping nötig
+    network_mode: host
+
+    # NET_ADMIN: wird für `wg show wg0` benötigt
+    cap_add:
+      - NET_ADMIN
+
+    volumes:
+      # Docker-Socket (read-only): Container-Status + Logs abfragen
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Host-/proc und /sys (read-only): RAM, Load, Uptime, Temperatur
+      - /proc:/hostproc:ro
+      - /sys:/hostsys:ro
+      # Host-Root (read-only): Disk-Auslastung des echten SD-Karten-Dateisystems
+      - /:/hostroot:ro
+
+    environment:
+      # Gleiche Variable wie in menu.sh — wird für DDNS-Abgleich verwendet
+      - VPN_HOST=${VPN_HOST:-}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
