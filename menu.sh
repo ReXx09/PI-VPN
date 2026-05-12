@@ -477,7 +477,7 @@ menu_diag_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
-            22 72 9 \
+            24 72 10 \
             "1" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "2" "  WireGuard Handshake prüfen" \
             "3" "  DNS-Auflösung testen  ($VPN_HOST)" \
@@ -486,6 +486,7 @@ menu_diag_wt() {
             "6" "  IPv6-Adresse prüfen" \
             "7" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
             "8" "  Alle Tests auf einmal" \
+            "9" "  🔧  IPv6-Autofix (prüfen & automatisch beheben)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -661,6 +662,11 @@ menu_diag_wt() {
                 echo -e "${BOLD}═══ Report Ende ═══${NC}"
                 press_enter
                 ;;
+            9)
+                clear
+                ipv6_autofix
+                press_enter
+                ;;
             0|"") return ;;
         esac
     done
@@ -669,6 +675,129 @@ menu_diag_wt() {
 # =============================================================================
 # TEXT-FALLBACK — einfaches Textmenü (ohne whiptail)
 # =============================================================================
+
+# IPv6-Autofix-Funktion (geteilt von whiptail + text)
+ipv6_autofix() {
+    local FIXES=0
+    local ERRORS=0
+
+    echo -e "${BOLD}═══ IPv6-Autofix ═══${NC}\n"
+
+    # ─ Schritt 1: Aktuelle IPv6 ermitteln
+    echo -e "${CYAN}[1/5] Aktuelle IPv6-Adresse:${NC}"
+    local CURRENT_IPV6
+    CURRENT_IPV6=$(ip -6 addr show eth0 2>/dev/null \
+        | grep 'scope global' \
+        | grep -v 'temporary' \
+        | awk '{print $2}' | cut -d'/' -f1 | head -1)
+    if [[ -z "$CURRENT_IPV6" ]]; then
+        echo -e "  ${RED}✘  Keine globale IPv6 auf eth0!${NC}"
+        echo -e "  ${DIM}→ IPv6 in Fritzbox aktiv? Privacy Extensions?${NC}"
+        (( ERRORS++ ))
+    else
+        echo -e "  ${GREEN}✔  $CURRENT_IPV6${NC}"
+    fi
+    echo ""
+
+    # ─ Schritt 2: Privacy Extensions
+    echo -e "${CYAN}[2/5] Privacy Extensions:${NC}"
+    local TEMPADDR
+    TEMPADDR=$(sysctl -n net.ipv6.conf.eth0.use_tempaddr 2>/dev/null || echo "?")
+    if [[ "$TEMPADDR" == "0" ]]; then
+        echo -e "  ${GREEN}✔  Deaktiviert — IPv6 bleibt stabil${NC}"
+    elif [[ "$TEMPADDR" == "?" ]]; then
+        echo -e "  ${YELLOW}⚠  Nicht prüfbar${NC}"
+    else
+        echo -e "  ${YELLOW}⚠  Privacy Extensions aktiv (use_tempaddr=$TEMPADDR) — deaktiviere…${NC}"
+        echo 'net.ipv6.conf.eth0.use_tempaddr = 0' > /etc/sysctl.d/99-no-tempaddr.conf
+        sysctl -w net.ipv6.conf.eth0.use_tempaddr=0 &>/dev/null
+        echo -e "  ${GREEN}✔  Behoben — gilt dauerhaft${NC}"
+        (( FIXES++ ))
+    fi
+    echo ""
+
+    # ─ Schritt 3: DDNS-Record vs. aktuelle IPv6
+    echo -e "${CYAN}[3/5] DDNS-Abgleich ($VPN_HOST):${NC}"
+    if ! command -v dig &>/dev/null; then
+        echo -e "  ${YELLOW}⚠  'dig' nicht installiert — übersprungen${NC}"
+        echo -e "  ${DIM}→ Option 1 im Diagnosemenü installieren${NC}"
+    else
+        local DNS_IPV6
+        DNS_IPV6=$(dig "$VPN_HOST" AAAA +short 2>/dev/null | head -1)
+        if [[ -z "$DNS_IPV6" ]]; then
+            echo -e "  ${RED}✘  Kein AAAA-Record für $VPN_HOST!${NC}"
+            echo -e "  ${DIM}→ ddns-go konfiguriert? http://$(raspi_ip):9876${NC}"
+            (( ERRORS++ ))
+        elif [[ "$DNS_IPV6" == "$CURRENT_IPV6" ]]; then
+            echo -e "  ${GREEN}✔  DNS stimmt überein: $DNS_IPV6${NC}"
+        else
+            echo -e "  ${YELLOW}⚠  Abweichung! DNS=$DNS_IPV6 / Raspi=$CURRENT_IPV6${NC}"
+            echo -e "  ${CYAN}→ ddns-go wird neugestartet…${NC}"
+            docker restart ddns-go &>/dev/null \
+                && echo -e "  ${GREEN}✔  ddns-go neugestartet (Update läuft ~30s)${NC}" \
+                || echo -e "  ${RED}✘  Neustart fehlgeschlagen${NC}"
+            (( FIXES++ ))
+        fi
+    fi
+    echo ""
+
+    # ─ Schritt 4: wg0 Interface
+    echo -e "${CYAN}[4/5] WireGuard Interface (wg0):${NC}"
+    if ip link show wg0 &>/dev/null; then
+        local HS
+        HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+        if [[ -n "$HS" && "$HS" != "0" ]]; then
+            local AGO=$(( $(date +%s) - HS ))
+            echo -e "  ${GREEN}✔  UP — letzter Handshake vor ${AGO}s${NC}"
+            [[ $AGO -gt 300 ]] && echo -e "  ${YELLOW}⚠  Kein Handshake seit über 5 Min — OPNsense prüfen${NC}"
+        else
+            echo -e "  ${YELLOW}⚠  UP aber kein Handshake — warte auf OPNsense${NC}"
+        fi
+    else
+        echo -e "  ${RED}✘  wg0 nicht aktiv — starte wireguard-ui neu…${NC}"
+        docker restart wireguard-ui &>/dev/null \
+            && echo -e "  ${GREEN}✔  wireguard-ui neugestartet${NC}" \
+            || echo -e "  ${RED}✘  Fehlgeschlagen${NC}"
+        (( FIXES++ ))
+    fi
+    echo ""
+
+    # ─ Schritt 5: ddns-go Container
+    echo -e "${CYAN}[5/5] ddns-go Container:${NC}"
+    local DDNS_RUNNING
+    DDNS_RUNNING=$(docker inspect -f '{{.State.Running}}' ddns-go 2>/dev/null || echo "false")
+    if [[ "$DDNS_RUNNING" == "true" ]]; then
+        local LAST_LOG
+        LAST_LOG=$(docker logs ddns-go --tail 3 2>&1 | tr '[:upper:]' '[:lower:]')
+        if echo "$LAST_LOG" | grep -qE "error|fail"; then
+            echo -e "  ${YELLOW}⚠  Fehler in Logs — starte neu…${NC}"
+            docker restart ddns-go &>/dev/null \
+                && echo -e "  ${GREEN}✔  Neugestartet${NC}" \
+                || echo -e "  ${RED}✘  Fehlgeschlagen${NC}"
+            (( FIXES++ ))
+        else
+            echo -e "  ${GREEN}✔  Läuft ohne Fehler${NC}"
+        fi
+    else
+        echo -e "  ${RED}✘  Gestoppt — starte…${NC}"
+        docker compose -f "$COMPOSE_FILE" up -d ddns-go &>/dev/null \
+            && echo -e "  ${GREEN}✔  Gestartet${NC}" \
+            || echo -e "  ${RED}✘  Fehler${NC}"
+        (( FIXES++ ))
+    fi
+    echo ""
+
+    # ─ Zusammenfassung
+    echo -e "${BOLD}═══ Ergebnis ═══${NC}"
+    if [[ $ERRORS -eq 0 && $FIXES -eq 0 ]]; then
+        echo -e "  ${GREEN}✔  Alles in Ordnung — keine Probleme gefunden${NC}"
+    elif [[ $ERRORS -eq 0 ]]; then
+        echo -e "  ${GREEN}✔  $FIXES Problem(e) automatisch behoben${NC}"
+        echo -e "  ${DIM}→ Warte ~60s, dann OPNsense-Tunnel neu starten${NC}"
+    else
+        echo -e "  ${YELLOW}⚠  $FIXES behoben, $ERRORS Fehler benötigen manuelle Prüfung${NC}"
+    fi
+}
 
 divider_text() { echo -e "  ${DIM}────────────────────────────────────────────────────────${NC}"; }
 
@@ -859,6 +988,7 @@ text_diag() {
         echo -e "  ${BOLD}[6]${NC}  IPv6-Adresse prüfen"
         echo -e "  ${BOLD}[7]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
         echo -e "  ${BOLD}[8]${NC}  Alle Tests auf einmal"
+        echo -e "  ${BOLD}[9]${NC}  IPv6-Autofix (prüfen & automatisch beheben)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
@@ -991,6 +1121,11 @@ text_diag() {
                 local MY_IPV6; MY_IPV6=$(curl -6 -s --max-time 5 ifconfig.co 2>/dev/null)
                 [[ -n "$MY_IPV6" ]] && echo -e "  ${GREEN}$MY_IPV6${NC}" || echo -e "  ${RED}nicht erreichbar${NC}"
                 echo -e "\n${BOLD}═══ Report Ende ═══${NC}"
+                press_enter
+                ;;
+            9)
+                clear
+                ipv6_autofix
                 press_enter
                 ;;
             0|"") return ;;
