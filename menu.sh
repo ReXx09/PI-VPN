@@ -145,7 +145,7 @@ main_menu_whiptail() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Zentrales Menue  |  $(hostname)  |  © 2026 Bocki" \
             --menu "${STATUS_LINE}\n\nWähle eine Kategorie:" \
-            24 84 9 \
+            26 84 10 \
             "1" "  🔧  Setup & Installation" \
             "2" "  📊  Status & Monitoring" \
             "3" "  🐳  Container-Verwaltung" \
@@ -153,6 +153,7 @@ main_menu_whiptail() {
             "5" "  🔄  Reset & Deinstallation" \
             "6" "  🌐  WebUI-Adressen anzeigen" \
             "7" "  🔬  Diagnose & Tools" \
+            "8" "  💾  Backup & Wiederherstellen" \
             "0" "  ❌  Beenden" \
             3>&1 1>&2 2>&3) || break
 
@@ -164,6 +165,7 @@ main_menu_whiptail() {
             5) menu_reset_wt ;;
             6) show_webui_addresses_wt ;;
             7) menu_diag_wt ;;
+            8) menu_backup_wt ;;
             0|"") break ;;
         esac
     done
@@ -984,6 +986,7 @@ main_menu_text() {
         echo -e "  ${BOLD}[5]${NC}  🔄  Reset & Deinstallation"
         echo -e "  ${BOLD}[6]${NC}  🌐  WebUI-Adressen anzeigen"
         echo -e "  ${BOLD}[7]${NC}  🔬  Diagnose & Tools"
+        echo -e "  ${BOLD}[8]${NC}  💾  Backup & Wiederherstellen"
         blank
         divider_text
         echo -e "  ${BOLD}[0]${NC}  Beenden"
@@ -1004,16 +1007,53 @@ main_menu_text() {
                 press_enter
                 ;;
             7) text_diag ;;
+            8) text_backup ;;
             0|q|Q|exit|quit) break ;;
             *) echo -e "  ${RED}Ungültige Auswahl.${NC}"; sleep 1 ;;
         esac
     done
 }
 
-text_setup() {
+# ─── Untermenü: Backup & Wiederherstellen (whiptail) ─────────────────────────
+menu_backup_wt() {
+    while true; do
+        local CHOICE
+        CHOICE=$(whiptail \
+            --title "PI-VPN | Backup & Wiederherstellen" \
+            --menu "\nWas möchtest du tun?" \
+            16 68 3 \
+            "1" "  Backup erstellen        (backup.sh)" \
+            "2" "  Backup wiederherstellen (restore.sh)" \
+            "0" "  ← Zurück zum Hauptmenü" \
+            3>&1 1>&2 2>&3) || return
+
+        case "$CHOICE" in
+            1) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
+            2) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
+            0|"") return ;;
+        esac
+    done
+}
+
+# ─── Untermenü: Backup & Wiederherstellen (Text-Fallback) ────────────────────
+text_backup() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}[SETUP] Setup & Installation${NC}"; blank
+        echo -e "  ${BOLD}[BACKUP] Backup & Wiederherstellen${NC}"; blank
+        echo -e "  ${BOLD}[1]${NC}  Backup erstellen        (backup.sh)"
+        echo -e "  ${BOLD}[2]${NC}  Backup wiederherstellen (restore.sh)"
+        blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
+        blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
+        read -r C
+        case "$C" in
+            1) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
+            2) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
+            0|"") return ;;
+        esac
+    done
+}
+
+text_setup() {
         echo -e "  ${BOLD}[1]${NC}  Vollständige Installation  (setup-wizard.sh)"
         echo -e "  ${BOLD}[2]${NC}  Nur Docker CE installieren (install-docker.sh)"
         echo -e "  ${BOLD}[3]${NC}  Verzeichnisse anlegen      (init.sh)"
