@@ -32,11 +32,13 @@ wechselnder IPv6-Adresse (Starlink vergbt neue Präfixe) immer findet.
 | **menu.sh**                 | Grafische TUI-Oberfläche (whiptail) als zentraler Einstiegspunkt            |
 | **setup-wizard.sh**         | Interaktiver 7-Stufen-Installer: Docker, WireGuard, .env, Container-Start   |
 | **install-docker.sh**       | Standalone-Skript zum Installieren von Docker CE auf dem Raspberry Pi        |
+| **install-dashboard.sh**    | Dashboard separat nachinstallieren                                           |
 | **init.sh**                 | Legt Verzeichnisstruktur und Berechtigungen an                               |
 | **status.sh**               | Vollständiger VPN-Status: Tunnel, Container, DDNS, IP-Forwarding            |
-| **backup.sh**               | Backup aller Konfigurationsdateien (Keys, Peers, .env, wg0.conf)            |
+| **backup.sh**               | Backup aller Konfigurationsdateien + optionaler Nextcloud-Upload             |
+| **restore.sh**              | Backup-Wiederherstellung aus lokalem Archiv                                  |
 | **reset.sh**                | 8-stufiger interaktiver Reset für Neu-Tests und Deinstallation               |
-| **docker-compose.yml**      | Fertig konfigurierter Stack: wireguard-ui + ddns-go                          |
+| **docker-compose.yml**      | Fertig konfigurierter Stack: wireguard-ui + ddns-go + Dashboard              |
 | **Dokumentation (docs/)**   | Schritt-für-Schritt-Anleitungen für alle Komponenten                         |
 
 ### Architektur im Überblick
@@ -131,10 +133,11 @@ Beide Anschlüsse haben **kein öffentlich erreichbares IPv4**, aber **natives I
 
 ### Nebenwohnsitz — Raspberry Pi (Docker)
 
-| Container    | Image                    | Funktion                        |
-|-------------|-------------------------|---------------------------------|
-| `wireguard` | `linuxserver/wireguard` | WireGuard-Client                |
-| `ddns-go`   | `jeessy/ddns-go`        | IPv6-DDNS-Updater (optional)    |
+| Container       | Image                          | Funktion                               |
+|----------------|-------------------------------|----------------------------------------|
+| `wireguard-ui` | `ngoduykhanh/wireguard-ui`    | WireGuard-Server-Verwaltung + WebUI    |
+| `ddns-go`      | `jeessy/ddns-go`              | IPv6-DDNS-Updater (AAAA-Record)        |
+| `dashboard`    | lokal gebaut (Flask/Alpine)   | Echtzeit-Monitoring-Dashboard :8080    |
 
 ---
 
@@ -147,7 +150,11 @@ PI-VPN/
 ├── docker/
 │   └── nebenwohnsitz/
 │       ├── docker-compose.yml      # Einziger Docker-Stack (Raspi)
-│       └── .env.example            # Umgebungsvariablen
+│       ├── .env.example            # Umgebungsvariablen (inkl. NC_* für Nextcloud)
+│       └── dashboard/              # Echtzeit-Dashboard (Flask, Port 8080)
+│           ├── app.py
+│           ├── Dockerfile
+│           └── static/index.html
 ├── config/
 │   ├── server/
 │   │   └── wg0.conf.example        # OPNsense Peer-Referenz
@@ -163,10 +170,12 @@ PI-VPN/
     ├── setup/
     │   ├── setup-wizard.sh         # Interaktiver 7-Stufen-Installer
     │   ├── install-docker.sh       # Docker auf Raspberry Pi installieren
+    │   ├── install-dashboard.sh    # Dashboard separat nachinstallieren
     │   └── init.sh                 # Erstkonfiguration
     └── manage/
         ├── status.sh               # VPN-Status anzeigen
-        ├── backup.sh               # Konfig-Backup
+        ├── backup.sh               # Konfig-Backup + Nextcloud-Upload
+        ├── restore.sh              # Backup-Wiederherstellung
         └── reset.sh                # Interaktiver Reset / Deinstallation
 ```
 
@@ -210,13 +219,16 @@ sudo bash menu.sh
 Das **zentrale Menü** (`menu.sh`) bietet eine grafische Terminal-Oberfläche (TUI)
 mit allen Funktionen auf einen Blick:
 
-| Menüpunkt               | Funktion                                                      |
-|-------------------------|---------------------------------------------------------------|
-| [SETUP]  Setup          | Wizard, Docker installieren, Verzeichnisse anlegen            |
-| [STATUS] Monitoring     | VPN-Status, Container-Logs, wg show, Routing                  |
-| [CONTAINER] Verwaltung  | Start / Stop / Restart, Live-Logs, Backup                     |
-| [CONFIG] Konfiguration  | .env bearbeiten, git pull, Systeminformationen                |
-| [RESET]  Deinstallation | Interaktiver Komplett-Reset für Neu-Tests                     |
+| Menüpunkt                    | Funktion                                                          |
+|------------------------------|-------------------------------------------------------------------|
+| [1] Setup & Installation     | Wizard, Docker, Dashboard, Verzeichnisse anlegen                  |
+| [2] Status & Monitoring      | VPN-Status, Container-Logs, wg show, Routing, Restore            |
+| [3] VPN-Dienste verwalten    | Start/Stop/Restart, Dashboard neu bauen, Live-Logs                |
+| [4] Konfiguration & Updates  | .env bearbeiten, git pull, Systeminformationen                    |
+| [5] Reset & Deinstallation   | Interaktiver Komplett-Reset für Neu-Tests                         |
+| [6] WebUI-Adressen           | Direkte Links zu wireguard-ui, ddns-go, Dashboard                 |
+| [7] Diagnose & Tools         | 11-Stufen-Autofix, Handshake, DNS, IPv6, Ping, tcpdump            |
+| [8] Backup & Wiederherstellen| Backup erstellen, Nextcloud-Upload konfigurieren, Restore         |
 
 > Alternativ direkt den Setup-Wizard starten:
 > `sudo bash /opt/pi-vpn/scripts/setup/setup-wizard.sh`

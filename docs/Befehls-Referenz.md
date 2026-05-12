@@ -64,8 +64,16 @@ sudo docker restart wireguard-ui
 # Nur ddns-go neu starten
 sudo docker restart ddns-go
 
-# Konfig-Backup erstellen (Keys, Peers, wg0.conf, .env)
+# Dashboard-Image neu bauen und Container ersetzen (nach git pull)
+sudo git -C /opt/pi-vpn pull
+sudo docker compose -f /opt/pi-vpn/docker/nebenwohnsitz/docker-compose.yml build dashboard
+sudo docker compose -f /opt/pi-vpn/docker/nebenwohnsitz/docker-compose.yml up -d --force-recreate dashboard
+
+# Konfig-Backup erstellen (Keys, Peers, wg0.conf, .env) + optionaler Nextcloud-Upload
 sudo bash /opt/pi-vpn/scripts/manage/backup.sh
+
+# Backup wiederherstellen
+sudo bash /opt/pi-vpn/scripts/manage/restore.sh
 ```
 
 > **Kurzform** — wenn du dich bereits im Compose-Verzeichnis befindest:
@@ -141,6 +149,7 @@ sudo bash /opt/pi-vpn/scripts/setup/setup-wizard.sh
 |---------------|-------------------------------|-----------------------------|
 | wireguard-ui  | `http://<raspi-ip>:5000`      | im Setup-Wizard festgelegt  |
 | ddns-go       | `http://<raspi-ip>:9876`      | kein Login (lokales Netz)   |
+| Dashboard     | `http://<raspi-ip>:8080`      | kein Login (lokales Netz)   |
 
 ```bash
 # Raspi-IP ermitteln
