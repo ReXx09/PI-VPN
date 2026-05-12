@@ -170,6 +170,20 @@
     .c-muted  { color: var(--muted);  }
     .empty    { text-align: center; padding: 28px 0; color: var(--muted); font-size: 13px; }
 
+    /* ── Link-Button ── */
+    .open-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 12px;
+      padding: 5px 12px;
+      background: #1c2d40; border: 1px solid #1f6feb;
+      border-radius: 6px;
+      color: var(--blue); font-size: 12px; font-weight: 600;
+      text-decoration: none;
+      transition: background .15s;
+    }
+    .open-btn:hover { background: #27405a; }
+    .open-btn svg { flex-shrink: 0; }
+
     /* ── Skeleton ── */
     .skel { color: var(--muted); font-style: italic; }
   </style>
@@ -214,6 +228,10 @@
       <div class="stat"><span class="stat-label">Status</span>    <span class="stat-val" id="wui-status">—</span></div>
       <div class="stat"><span class="stat-label">Neustarts</span> <span class="stat-val" id="wui-rst">—</span></div>
       <div class="stat"><span class="stat-label">Port</span>      <span class="stat-val c-muted">5000</span></div>
+      <a id="link-wui" class="open-btn" href="#" target="_blank" rel="noopener">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0z"/></svg>
+        WebUI öffnen
+      </a>
     </div>
 
     <!-- ddns-go -->
@@ -223,6 +241,10 @@
       <div class="stat"><span class="stat-label">Status</span>    <span class="stat-val" id="ddns-ctr-status">—</span></div>
       <div class="stat"><span class="stat-label">Neustarts</span> <span class="stat-val" id="ddns-rst">—</span></div>
       <div class="stat"><span class="stat-label">Port</span>      <span class="stat-val c-muted">9876</span></div>
+      <a id="link-ddns" class="open-btn" href="#" target="_blank" rel="noopener">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0z"/></svg>
+        WebUI öffnen
+      </a>
     </div>
 
     <!-- System -->
@@ -470,6 +492,11 @@
   }
 
   // ── Start ──────────────────────────────────────────────────────────────────
+  // Links dynamisch auf Basis des aktuellen Hostnamens setzen
+  const _host = window.location.hostname;
+  document.getElementById('link-wui').href  = `http://${_host}:5000`;
+  document.getElementById('link-ddns').href = `http://${_host}:9876`;
+
   refresh();
   setInterval(refresh, INTERVAL);
   setInterval(tick, 1000);
