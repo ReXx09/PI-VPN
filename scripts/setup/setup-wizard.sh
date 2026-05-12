@@ -127,6 +127,40 @@ if ! ask_yn "Jetzt starten?"; then
     exit 0
 fi
 
+# ─── Update-Modus: bestehende Installation erkennen ──────────────────────────
+UPDATE_MODE=false
+if [[ -f "$ENV_FILE" ]]; then
+    blank
+    echo -e "  ${YELLOW}⚠  Bestehende Installation gefunden!${NC}"
+    echo -e "     ${DIM}$ENV_FILE${NC}"
+    blank
+    echo -e "  ${BOLD}Was möchtest du tun?${NC}"
+    echo ""
+    echo -e "  ${BOLD}[1]${NC}  ${GREEN}Update${NC}  — Container aktualisieren, .env + Peer-Daten ${BOLD}behalten${NC}"
+    echo -e "  ${BOLD}[2]${NC}  ${YELLOW}Neuinstallation${NC}  — alles neu konfigurieren (.env wird überschrieben)"
+    echo -e "  ${BOLD}[0]${NC}  Abbrechen"
+    blank
+    echo -ne "  ${CYAN}▶${NC} Auswahl [1/2/0]: "
+    read -r REINSTALL_CHOICE
+    case "$REINSTALL_CHOICE" in
+        1)
+            UPDATE_MODE=true
+            ok "Update-Modus — bestehende .env wird beibehalten"
+            ;;
+        2)
+            blank
+            warn "Neuinstallation gewählt — .env wird überschrieben."
+            info "Erstelle Backup der bestehenden .env…"
+            cp "$ENV_FILE" "${ENV_FILE}.bak.$(date +%Y%m%d_%H%M%S)"
+            ok "Backup gespeichert: ${ENV_FILE}.bak.$(date +%Y%m%d_%H%M%S 2>/dev/null || true)"
+            ;;
+        *)
+            echo -e "\n  Abgebrochen.\n"
+            exit 0
+            ;;
+    esac
+fi
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SCHRITT 1 — SYSTEMCHECK
@@ -212,10 +246,22 @@ ok "IP-Forwarding aktiv"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SCHRITT 3 — WIREGUARD-UI KONFIGURATION
+# SCHRITT 3–6 — KONFIGURATION (wird im Update-Modus übersprungen)
 # ═════════════════════════════════════════════════════════════════════════════
-step "3 von 7 — WireGuard-UI Konfiguration"
-divider
+if $UPDATE_MODE; then
+    blank
+    echo -e "  ${GREEN}→${NC}  Update-Modus: Schritte 3–6 übersprungen — bestehende .env wird verwendet."
+    blank
+    # Variablen für Abschluss-Ausgabe aus bestehender .env laden
+    WGUI_USERNAME=$(grep   '^WGUI_USERNAME='                    "$ENV_FILE" | cut -d= -f2- || echo "admin")
+    WGUI_SERVER_ADDR=$(grep '^WGUI_SERVER_INTERFACE_ADDRESSES=' "$ENV_FILE" | cut -d= -f2- || echo "10.10.0.1/24")
+    WGUI_MTU=$(grep         '^WGUI_MTU='                        "$ENV_FILE" | cut -d= -f2- || echo "1280")
+    WGUI_DNS=$(grep         '^WGUI_DNS='                        "$ENV_FILE" | cut -d= -f2- || echo "1.1.1.1")
+    WGUI_PASSWORD="(unverändert)"
+    SETUP_DDNS=true
+else
+    step "3 von 7 — WireGuard-UI Konfiguration"
+    divider
 echo ""
 echo -e "  Die folgenden Einstellungen gelten für die ${BOLD}wireguard-ui WebUI${NC}."
 echo -e "  Danach richtest du die eigentliche VPN-Verbindung in der WebUI ein."
@@ -360,14 +406,6 @@ if ! ask_yn "Alles korrekt? Jetzt speichern und Container starten?"; then
     exit 1
 fi
 
-# Datenverzeichnisse anlegen
-info "Erstelle Datenverzeichnisse..."
-mkdir -p "$DOCKER_DIR/data/wireguard"
-mkdir -p "$DOCKER_DIR/data/db"
-mkdir -p "$DOCKER_DIR/data/ddns-go"
-chmod 700 "$DOCKER_DIR/data/wireguard"
-ok "Verzeichnisse erstellt"
-
 # PostUp/PostDown für iptables-MASQUERADE (LAN-Routing)
 POSTUP="iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${LAN_IFACE} -j MASQUERADE; ip6tables -A FORWARD -i wg0 -j ACCEPT; ip6tables -t nat -A POSTROUTING -o ${LAN_IFACE} -j MASQUERADE"
 POSTDOWN="iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${LAN_IFACE} -j MASQUERADE; ip6tables -D FORWARD -i wg0 -j ACCEPT; ip6tables -t nat -D POSTROUTING -o ${LAN_IFACE} -j MASQUERADE"
@@ -406,6 +444,16 @@ ENVFILE
 
 chmod 600 "$ENV_FILE"
 ok ".env gespeichert: $ENV_FILE"
+
+fi  # Ende if $UPDATE_MODE ... else ...
+
+# Datenverzeichnisse sicherstellen (im Update-Modus nur mkdir -p, nichts gelöscht)
+info "Prüfe Datenverzeichnisse..."
+mkdir -p "$DOCKER_DIR/data/wireguard"
+mkdir -p "$DOCKER_DIR/data/db"
+mkdir -p "$DOCKER_DIR/data/ddns-go"
+chmod 700 "$DOCKER_DIR/data/wireguard"
+ok "Verzeichnisse vorhanden"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
