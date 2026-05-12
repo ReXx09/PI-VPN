@@ -198,9 +198,9 @@ sudo bash menu.sh
 ```bash
 # Aktuelles Release als ZIP herunterladen und entpacken
 cd /tmp
-wget https://github.com/ReXx09/PI-VPN/archive/refs/tags/v1.0.0.tar.gz
+wget https://github.com/ReXx09/PI-VPN/archive/refs/tags/v1.1.0.tar.gz
 sudo mkdir -p /opt/pi-vpn
-sudo tar -xzf v1.0.0.tar.gz --strip-components=1 -C /opt/pi-vpn
+sudo tar -xzf v1.1.0.tar.gz --strip-components=1 -C /opt/pi-vpn
 
 # Zentrales Menü starten
 cd /opt/pi-vpn
