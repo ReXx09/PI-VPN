@@ -740,11 +740,11 @@ ipv6_autofix() {
         sleep 3
         if systemctl is-active --quiet docker; then
             echo -e "  ${GREEN}✔  Docker gestartet${NC}"
+            (( FIXES++ ))
         else
             echo -e "  ${RED}✘  Docker konnte nicht gestartet werden — Container-Checks übersprungen${NC}"
             (( ERRORS++ ))
         fi
-        (( FIXES++ ))
     else
         echo -e "  ${GREEN}✔  Läuft${NC}"
     fi
@@ -836,7 +836,9 @@ ipv6_autofix() {
     echo -e "${CYAN}[7/$TOTAL] DDNS-Abgleich ($VPN_HOST):${NC}"
     if ! command -v dig &>/dev/null; then
         echo -e "  ${YELLOW}⚠  'dig' nicht installiert — übersprungen${NC}"
-        echo -e "  ${DIM}→ Option 1 im Diagnosemenü: Tools installieren${NC}"
+        echo -e "  ${DIM}→ Option 9 im Diagnosemenü: Tools installieren${NC}"
+    elif [[ -z "$CURRENT_IPV6" ]]; then
+        echo -e "  ${YELLOW}⚠  übersprungen (keine lokale IPv6 — Schritt 6 prüfen)${NC}"
     else
         local DNS_IPV6
         DNS_IPV6=$(dig "$VPN_HOST" AAAA +short 2>/dev/null | head -1)
