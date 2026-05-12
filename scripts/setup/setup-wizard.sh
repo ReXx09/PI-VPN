@@ -417,7 +417,7 @@ blank
 
 info "Starte Docker-Stack in $DOCKER_DIR ..."
 cd "$DOCKER_DIR"
-docker compose up -d
+BUILDKIT_PROGRESS=plain docker compose up -d --build
 
 # Kurz warten bis Container bereit sind
 info "Warte auf Container-Start (10 Sekunden)..."
