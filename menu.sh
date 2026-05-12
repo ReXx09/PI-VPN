@@ -294,13 +294,14 @@ menu_container_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | VPN-Dienste verwalten" \
             --menu "${STATUS_INFO}\n\nWelche Aktion?" \
-            22 72 7 \
+            24 72 8 \
             "1" "  Alle Container starten" \
             "2" "  Alle Container stoppen" \
             "3" "  Alle Container neu starten" \
             "4" "  wireguard-ui neu starten" \
             "5" "  ddns-go neu starten" \
-            "6" "  Live-Logs verfolgen  (Ctrl+C zum Beenden)" \
+            "6" "  Dashboard neu bauen & starten  (build + recreate)" \
+            "7" "  Live-Logs verfolgen  (Ctrl+C zum Beenden)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -350,6 +351,27 @@ menu_container_wt() {
                 press_enter
                 ;;
             6)
+                if whiptail --title "Dashboard neu bauen" \
+                    --yesno "Dashboard-Image neu bauen und Container ersetzen?\n\n  git pull + docker compose build dashboard\n  docker compose up -d --force-recreate dashboard\n\nDas dauert ~1 Minute." \
+                    12 66; then
+                    clear
+                    echo -e "${BOLD}Dashboard neu bauen & starten…${NC}\n"
+                    echo -e "${CYAN}[1/3] git pull…${NC}"
+                    git -C "$SCRIPT_DIR" pull 2>&1 || echo -e "${YELLOW}⚠  git pull übersprungen (kein Netz oder kein Repo)${NC}"
+                    echo ""
+                    echo -e "${CYAN}[2/3] docker compose build dashboard…${NC}"
+                    docker compose -f "$COMPOSE_FILE" build dashboard \
+                        && echo -e "${GREEN}✔  Build erfolgreich${NC}" \
+                        || { echo -e "${RED}✘  Build fehlgeschlagen${NC}"; press_enter; return; }
+                    echo ""
+                    echo -e "${CYAN}[3/3] Container ersetzen…${NC}"
+                    docker compose -f "$COMPOSE_FILE" up -d --force-recreate dashboard \
+                        && echo -e "\n${GREEN}✔  Dashboard läuft mit dem neuen Image${NC}" \
+                        || echo -e "\n${RED}✘  Fehler beim Starten${NC}"
+                    press_enter
+                fi
+                ;;
+            7)
                 clear
                 echo -e "${BOLD}Live-Logs (Ctrl+C zum Beenden):${NC}\n"
                 docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true
