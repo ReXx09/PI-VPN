@@ -1003,6 +1003,151 @@ main_menu_text() {
 }
 
 # ─── Untermenü: Backup & Wiederherstellen (whiptail) ─────────────────────────
+# ─── Nextcloud konfigurieren (Hilfsfunktion, geteilt) ────────────────────────
+_nc_write_env() {
+    # Schreibt/aktualisiert NC_* Variablen in die .env
+    local url="$1" user="$2" pass="$3" path="$4"
+    if [[ ! -f "$ENV_FILE" ]]; then
+        echo -e "  ${RED}✘${NC}  .env nicht gefunden — zuerst Setup-Wizard ausführen."; return 1
+    fi
+    # Vorhandene NC_*-Zeilen (auch auskommentierte) entfernen, dann neu anhängen
+    local TMP; TMP=$(mktemp)
+    grep -v -E '^#?NC_(URL|USER|PASS|PATH)=' "$ENV_FILE" > "$TMP"
+    {
+        echo ""
+        echo "# --- Nextcloud Backup-Export ---"
+        echo "NC_URL=${url}"
+        echo "NC_USER=${user}"
+        echo "NC_PASS=${pass}"
+        echo "NC_PATH=${path}"
+    } >> "$TMP"
+    mv "$TMP" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
+}
+
+configure_nextcloud_wt() {
+    # Aktuelle Werte vorladen
+    local CUR_URL CUR_USER CUR_PASS CUR_PATH
+    CUR_URL=$(grep  -E '^NC_URL='  "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_USER=$(grep -E '^NC_USER=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PASS=$(grep -E '^NC_PASS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PATH=$(grep -E '^NC_PATH=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PATH="${CUR_PATH:-/PI-VPN-Backups}"
+
+    # Wenn konfiguriert: Option zum Deaktivieren anbieten
+    if [[ -n "$CUR_URL" ]]; then
+        if ! whiptail --title "Nextcloud" \
+            --yesno "Nextcloud ist bereits konfiguriert:\n\n  URL:  ${CUR_URL}\n  User: ${CUR_USER}\n  Pass: $(echo "$CUR_PASS" | sed 's/./*/g')\n  Pfad: ${CUR_PATH}\n\nEinstellungen ändern oder deaktivieren?" \
+            14 66; then
+            return
+        fi
+        if whiptail --title "Nextcloud" \
+            --yesno "Nextcloud-Upload deaktivieren?\n(NC_* Variablen werden aus .env entfernt)" \
+            10 60; then
+            local TMP; TMP=$(mktemp)
+            grep -v -E '^#?NC_(URL|USER|PASS|PATH)=' "$ENV_FILE" > "$TMP"
+            grep -v -E '^# --- Nextcloud' "$TMP" > "$ENV_FILE" || mv "$TMP" "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+            whiptail --title "Nextcloud" --msgbox "Nextcloud-Upload deaktiviert." 8 40
+            return
+        fi
+    fi
+
+    local NEW_URL NEW_USER NEW_PASS NEW_PATH
+    NEW_URL=$(whiptail --title "Nextcloud — URL" \
+        --inputbox "\nNextcloud-URL (ohne abschließendes /):\n\nBeispiel: https://cloud.deine-domain.de" \
+        12 64 "${CUR_URL}" 3>&1 1>&2 2>&3) || return
+    [[ -z "$NEW_URL" ]] && { whiptail --title "Fehler" --msgbox "URL darf nicht leer sein." 8 40; return; }
+
+    NEW_USER=$(whiptail --title "Nextcloud — Benutzername" \
+        --inputbox "\nNextcloud-Benutzername:" \
+        10 56 "${CUR_USER}" 3>&1 1>&2 2>&3) || return
+    [[ -z "$NEW_USER" ]] && { whiptail --title "Fehler" --msgbox "Benutzername darf nicht leer sein." 8 44; return; }
+
+    NEW_PASS=$(whiptail --title "Nextcloud — App-Passwort" \
+        --passwordbox "\nApp-Passwort eingeben:\n(Nextcloud → Einstellungen → Sicherheit → App-Passwörter)" \
+        12 66 3>&1 1>&2 2>&3) || return
+    [[ -z "$NEW_PASS" ]] && { whiptail --title "Fehler" --msgbox "Passwort darf nicht leer sein." 8 40; return; }
+
+    NEW_PATH=$(whiptail --title "Nextcloud — Zielordner" \
+        --inputbox "\nZielordner auf Nextcloud:\n(wird automatisch angelegt falls nicht vorhanden)" \
+        11 60 "${CUR_PATH}" 3>&1 1>&2 2>&3) || return
+    NEW_PATH="${NEW_PATH:-/PI-VPN-Backups}"
+
+    _nc_write_env "$NEW_URL" "$NEW_USER" "$NEW_PASS" "$NEW_PATH" \
+        && whiptail --title "Nextcloud" --msgbox \
+            "Gespeichert!\n\nURL:  ${NEW_URL}\nUser: ${NEW_USER}\nPfad: ${NEW_PATH}\n\nBeim nächsten Backup wird automatisch hochgeladen." \
+            13 64 \
+        || whiptail --title "Fehler" --msgbox "Speichern fehlgeschlagen — .env prüfen." 8 46
+}
+
+configure_nextcloud_text() {
+    clear; blank
+    echo -e "  ${BOLD}Nextcloud-Upload konfigurieren${NC}"; blank
+
+    local CUR_URL CUR_USER CUR_PASS CUR_PATH
+    CUR_URL=$(grep  -E '^NC_URL='  "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_USER=$(grep -E '^NC_USER=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PASS=$(grep -E '^NC_PASS=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PATH=$(grep -E '^NC_PATH=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+    CUR_PATH="${CUR_PATH:-/PI-VPN-Backups}"
+
+    if [[ -n "$CUR_URL" ]]; then
+        echo -e "  ${GREEN}Aktuell konfiguriert:${NC}"
+        echo -e "  URL:  $CUR_URL"
+        echo -e "  User: $CUR_USER"
+        echo -e "  Pass: $(echo "$CUR_PASS" | sed 's/./*/g')"
+        echo -e "  Pfad: $CUR_PATH"; blank
+        echo -ne "  ${BOLD}[d]${NC} Deaktivieren  ${BOLD}[ä]${NC} Ändern  ${BOLD}[0]${NC} Abbrechen ${CYAN}▶${NC} "
+        read -r ACT
+        case "${ACT,,}" in
+            d)
+                local TMP; TMP=$(mktemp)
+                grep -v -E '^#?NC_(URL|USER|PASS|PATH)=' "$ENV_FILE" > "$TMP"
+                grep -v -E '^# --- Nextcloud' "$TMP" > "$ENV_FILE" || mv "$TMP" "$ENV_FILE"
+                chmod 600 "$ENV_FILE"
+                echo -e "\n  ${GREEN}✔${NC}  Nextcloud-Upload deaktiviert."; press_enter; return ;;
+            0|"") return ;;
+        esac
+    fi
+
+    blank
+    echo -e "  ${BOLD}App-Passwort${NC} erstellen unter:"
+    echo -e "  Nextcloud → (Avatar oben rechts) → Einstellungen → ${BOLD}Sicherheit → App-Passwörter${NC}"
+    echo -e "  ${RED}ACHTUNG:${NC} NICHT dein Login-Passwort verwenden!"
+    blank
+
+    local NEW_URL NEW_USER NEW_PASS NEW_PATH
+    echo -ne "  Nextcloud-URL ${DIM}(z.B. https://cloud.deine-domain.de)${NC}: "
+    read -r NEW_URL
+    [[ -z "$NEW_URL" ]] && { echo -e "  ${RED}✘${NC}  URL darf nicht leer sein."; press_enter; return; }
+
+    echo -ne "  Benutzername: "
+    read -r NEW_USER
+    [[ -z "$NEW_USER" ]] && { echo -e "  ${RED}✘${NC}  Benutzername darf nicht leer sein."; press_enter; return; }
+
+    echo -ne "  App-Passwort ${DIM}(wird nicht angezeigt)${NC}: "
+    read -rs NEW_PASS; echo ""
+    [[ -z "$NEW_PASS" ]] && { echo -e "  ${RED}✘${NC}  Passwort darf nicht leer sein."; press_enter; return; }
+
+    echo -ne "  Zielordner auf Nextcloud ${DIM}[${CUR_PATH}]${NC}: "
+    read -r NEW_PATH
+    NEW_PATH="${NEW_PATH:-$CUR_PATH}"
+
+    if _nc_write_env "$NEW_URL" "$NEW_USER" "$NEW_PASS" "$NEW_PATH"; then
+        blank
+        echo -e "  ${GREEN}✔  Gespeichert!${NC}"
+        echo -e "  URL:  $NEW_URL"
+        echo -e "  User: $NEW_USER"
+        echo -e "  Pfad: $NEW_PATH"
+        echo -e "  Beim nächsten Backup wird automatisch auf Nextcloud hochgeladen."
+    else
+        echo -e "  ${RED}✘${NC}  Speichern fehlgeschlagen."
+    fi
+    press_enter
+}
+
+# ─── Untermenü: Backup & Wiederherstellen (whiptail) ─────────────────────────
 menu_backup_wt() {
     while true; do
         # Nextcloud-Status für Menübeschriftung
@@ -1016,16 +1161,18 @@ menu_backup_wt() {
         local CHOICE
         CHOICE=$(whiptail \
             --title "PI-VPN | Backup & Wiederherstellen" \
-            --menu "\nNextcloud-Export: ${NC_HINT}\n(konfigurieren: Menü 4 → .env bearbeiten)\n\nWas möchtest du tun?" \
-            18 72 3 \
-            "1" "  Backup erstellen        (backup.sh)" \
-            "2" "  Backup wiederherstellen (restore.sh)" \
+            --menu "\nNextcloud-Export: ${NC_HINT}\n\nWas möchtest du tun?" \
+            18 72 4 \
+            "1" "  Backup erstellen              (backup.sh)" \
+            "2" "  Backup wiederherstellen       (restore.sh)" \
+            "3" "  Nextcloud-Upload konfigurieren" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
         case "$CHOICE" in
             1) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
             2) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
+            3) configure_nextcloud_wt ;;
             0|"") return ;;
         esac
     done
@@ -1046,14 +1193,16 @@ text_backup() {
             echo -e "  ${DIM}→ Menü 4 → .env bearbeiten → NC_URL / NC_USER / NC_PASS setzen${NC}"
         fi
         blank
-        echo -e "  ${BOLD}[1]${NC}  Backup erstellen        (backup.sh)"
-        echo -e "  ${BOLD}[2]${NC}  Backup wiederherstellen (restore.sh)"
+        echo -e "  ${BOLD}[1]${NC}  Backup erstellen              (backup.sh)"
+        echo -e "  ${BOLD}[2]${NC}  Backup wiederherstellen       (restore.sh)"
+        echo -e "  ${BOLD}[3]${NC}  Nextcloud-Upload konfigurieren"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
         case "$C" in
             1) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
             2) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
+            3) configure_nextcloud_text ;;
             0|"") return ;;
         esac
     done
