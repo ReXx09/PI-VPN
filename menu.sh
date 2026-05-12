@@ -292,14 +292,15 @@ menu_container_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Container-Verwaltung" \
             --menu "${STATUS_INFO}\n\nWelche Aktion?" \
-            22 72 8 \
+            24 72 9 \
             "1" "  Alle Container starten" \
             "2" "  Alle Container stoppen" \
             "3" "  Alle Container neu starten" \
             "4" "  wireguard-ui neu starten" \
             "5" "  ddns-go neu starten" \
             "6" "  Konfig-Backup erstellen   (backup.sh)" \
-            "7" "  Container-Logs live verfolgen (Ctrl+C zum Beenden)" \
+            "7" "  Backup wiederherstellen   (restore.sh)" \
+            "8" "  Container-Logs live verfolgen (Ctrl+C zum Beenden)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -354,6 +355,11 @@ menu_container_wt() {
                 press_enter
                 ;;
             7)
+                clear
+                bash "$MANAGE_DIR/restore.sh"
+                press_enter
+                ;;
+            8)
                 clear
                 echo -e "${BOLD}Live-Logs (Ctrl+C zum Beenden):${NC}\n"
                 docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true
@@ -1060,8 +1066,9 @@ text_container() {
         echo -e "  ${BOLD}[3]${NC}  Alle Container neu starten"
         echo -e "  ${BOLD}[4]${NC}  wireguard-ui neu starten"
         echo -e "  ${BOLD}[5]${NC}  ddns-go neu starten"
-        echo -e "  ${BOLD}[6]${NC}  Backup erstellen (backup.sh)"
-        echo -e "  ${BOLD}[7]${NC}  Live-Logs (Ctrl+C zum Beenden)"
+        echo -e "  ${BOLD}[6]${NC}  Backup erstellen     (backup.sh)"
+        echo -e "  ${BOLD}[7]${NC}  Backup wiederherstellen (restore.sh)"
+        echo -e "  ${BOLD}[8]${NC}  Live-Logs (Ctrl+C zum Beenden)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
@@ -1075,7 +1082,8 @@ text_container() {
             4) clear; docker restart wireguard-ui; press_enter ;;
             5) clear; docker restart ddns-go; press_enter ;;
             6) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
-            7) clear; docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true; press_enter ;;
+            7) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
+            8) clear; docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true; press_enter ;;
             0|"") return ;;
         esac
     done
