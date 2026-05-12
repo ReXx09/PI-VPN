@@ -128,16 +128,38 @@ if ! ask_yn "Jetzt starten?"; then
 fi
 
 # ─── Update-Modus: bestehende Installation erkennen ──────────────────────────
+# Sucht .env an mehreren möglichen Orten UND prüft ob Container laufen.
 UPDATE_MODE=false
-if [[ -f "$ENV_FILE" ]]; then
+EXISTING_ENV=""
+
+# Mögliche Installationspfade (manuell angelegt oder per Klon)
+for CANDIDATE in \
+    "$ENV_FILE" \
+    "/opt/pi-vpn/docker/nebenwohnsitz/.env" \
+    "/home/pi/PI-VPN/docker/nebenwohnsitz/.env" \
+    "/root/PI-VPN/docker/nebenwohnsitz/.env"; do
+    if [[ -f "$CANDIDATE" ]]; then
+        EXISTING_ENV="$CANDIDATE"
+        break
+    fi
+done
+
+# Auch per laufendem Container erkennen (auch wenn .env woanders liegt)
+EXISTING_CONTAINER=false
+if docker inspect wireguard-ui &>/dev/null 2>&1; then
+    EXISTING_CONTAINER=true
+fi
+
+if [[ -n "$EXISTING_ENV" || "$EXISTING_CONTAINER" == "true" ]]; then
     blank
-    echo -e "  ${YELLOW}⚠  Bestehende Installation gefunden!${NC}"
-    echo -e "     ${DIM}$ENV_FILE${NC}"
+    echo -e "  ${YELLOW}⚠  Bestehende PI-VPN Installation gefunden!${NC}"
+    [[ -n "$EXISTING_ENV" ]] && echo -e "     ${DIM}.env: $EXISTING_ENV${NC}"
+    [[ "$EXISTING_CONTAINER" == "true" ]] && echo -e "     ${DIM}Container wireguard-ui läuft bereits${NC}"
     blank
     echo -e "  ${BOLD}Was möchtest du tun?${NC}"
     echo ""
-    echo -e "  ${BOLD}[1]${NC}  ${GREEN}Update${NC}  — Container aktualisieren, .env + Peer-Daten ${BOLD}behalten${NC}"
-    echo -e "  ${BOLD}[2]${NC}  ${YELLOW}Neuinstallation${NC}  — alles neu konfigurieren (.env wird überschrieben)"
+    echo -e "  ${BOLD}[1]${NC}  ${GREEN}Update${NC}        — Container aktualisieren, .env + Peer-Daten ${BOLD}behalten${NC}"
+    echo -e "  ${BOLD}[2]${NC}  ${YELLOW}Neuinstallation${NC} — alles neu konfigurieren (.env wird gesichert)"
     echo -e "  ${BOLD}[0]${NC}  Abbrechen"
     blank
     echo -ne "  ${CYAN}▶${NC} Auswahl [1/2/0]: "
@@ -145,14 +167,25 @@ if [[ -f "$ENV_FILE" ]]; then
     case "$REINSTALL_CHOICE" in
         1)
             UPDATE_MODE=true
-            ok "Update-Modus — bestehende .env wird beibehalten"
+            # Wenn .env woanders liegt: in das Projekt-Verzeichnis kopieren
+            if [[ -n "$EXISTING_ENV" && "$EXISTING_ENV" != "$ENV_FILE" ]]; then
+                mkdir -p "$(dirname "$ENV_FILE")"
+                cp "$EXISTING_ENV" "$ENV_FILE"
+                ok "bestehende .env übernommen aus: $EXISTING_ENV"
+            fi
+            ok "Update-Modus — bestehende Konfiguration wird beibehalten"
             ;;
         2)
-            blank
-            warn "Neuinstallation gewählt — .env wird überschrieben."
-            info "Erstelle Backup der bestehenden .env…"
-            cp "$ENV_FILE" "${ENV_FILE}.bak.$(date +%Y%m%d_%H%M%S)"
-            ok "Backup gespeichert: ${ENV_FILE}.bak.$(date +%Y%m%d_%H%M%S 2>/dev/null || true)"
+            if [[ -n "$EXISTING_ENV" ]]; then
+                blank
+                warn "Neuinstallation gewählt — .env wird überschrieben."
+                info "Erstelle Backup der bestehenden .env…"
+                BKFILE="${EXISTING_ENV}.bak.$(date +%Y%m%d_%H%M%S)"
+                cp "$EXISTING_ENV" "$BKFILE"
+                ok "Backup gespeichert: $BKFILE"
+                # Falls .env woanders liegt, ENV_FILE auf bekannten Pfad setzen
+                ENV_FILE="$EXISTING_ENV"
+            fi
             ;;
         *)
             echo -e "\n  Abgebrochen.\n"
