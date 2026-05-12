@@ -680,27 +680,102 @@ menu_diag_wt() {
 ipv6_autofix() {
     local FIXES=0
     local ERRORS=0
+    local TOTAL=11
 
-    echo -e "${BOLD}═══ IPv6-Autofix ═══${NC}\n"
+    echo -e "${BOLD}═══ System-Autofix & Diagnose ═══${NC}\n"
 
-    # ─ Schritt 1: Aktuelle IPv6 ermitteln
-    echo -e "${CYAN}[1/5] Aktuelle IPv6-Adresse:${NC}"
-    local CURRENT_IPV6
-    CURRENT_IPV6=$(ip -6 addr show eth0 2>/dev/null \
-        | grep 'scope global' \
-        | grep -v 'temporary' \
-        | awk '{print $2}' | cut -d'/' -f1 | head -1)
-    if [[ -z "$CURRENT_IPV6" ]]; then
-        echo -e "  ${RED}✘  Keine globale IPv6 auf eth0!${NC}"
-        echo -e "  ${DIM}→ IPv6 in Fritzbox aktiv? Privacy Extensions?${NC}"
+    # ─ Schritt 1: eth0 Link-Status ──────────────────────────────────────────
+    echo -e "${CYAN}[1/$TOTAL] Netzwerk-Interface (eth0):${NC}"
+    if ! ip link show eth0 &>/dev/null; then
+        echo -e "  ${RED}✘  eth0 existiert nicht — physisches Problem?${NC}"
         (( ERRORS++ ))
     else
-        echo -e "  ${GREEN}✔  $CURRENT_IPV6${NC}"
+        local ETH_STATE
+        ETH_STATE=$(ip link show eth0 | grep -oP '(?<=state )\w+')
+        if [[ "$ETH_STATE" == "UP" ]]; then
+            echo -e "  ${GREEN}✔  UP${NC}"
+        else
+            echo -e "  ${YELLOW}⚠  eth0 ist $ETH_STATE — aktiviere…${NC}"
+            ip link set eth0 up
+            sleep 2
+            ETH_STATE=$(ip link show eth0 | grep -oP '(?<=state )\w+')
+            [[ "$ETH_STATE" == "UP" ]] \
+                && echo -e "  ${GREEN}✔  Aktiviert${NC}" \
+                || echo -e "  ${RED}✘  Konnte nicht aktiviert werden${NC}"
+            (( FIXES++ ))
+        fi
     fi
     echo ""
 
-    # ─ Schritt 2: Privacy Extensions
-    echo -e "${CYAN}[2/5] Privacy Extensions:${NC}"
+    # ─ Schritt 2: Docker-Daemon ──────────────────────────────────────────────
+    echo -e "${CYAN}[2/$TOTAL] Docker-Daemon:${NC}"
+    if ! systemctl is-active --quiet docker; then
+        echo -e "  ${RED}✘  Docker läuft nicht — starte…${NC}"
+        systemctl start docker &>/dev/null
+        sleep 3
+        if systemctl is-active --quiet docker; then
+            echo -e "  ${GREEN}✔  Docker gestartet${NC}"
+        else
+            echo -e "  ${RED}✘  Docker konnte nicht gestartet werden — Container-Checks übersprungen${NC}"
+            (( ERRORS++ ))
+        fi
+        (( FIXES++ ))
+    else
+        echo -e "  ${GREEN}✔  Läuft${NC}"
+    fi
+    echo ""
+
+    # ─ Schritt 3: Zeit-Synchronisation (NTP) ────────────────────────────────
+    echo -e "${CYAN}[3/$TOTAL] Zeit-Synchronisation (NTP):${NC}"
+    local TIMESYNCED
+    TIMESYNCED=$(timedatectl show --property=NTPSynchronized --value 2>/dev/null || echo "unknown")
+    if [[ "$TIMESYNCED" == "yes" ]]; then
+        echo -e "  ${GREEN}✔  NTP synchronisiert${NC}"
+    elif [[ "$TIMESYNCED" == "unknown" ]]; then
+        echo -e "  ${YELLOW}⚠  Nicht prüfbar (timedatectl fehlt?)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠  NTP nicht sync — starte timesyncd neu…${NC}"
+        systemctl restart systemd-timesyncd &>/dev/null
+        sleep 5
+        TIMESYNCED=$(timedatectl show --property=NTPSynchronized --value 2>/dev/null || echo "unknown")
+        if [[ "$TIMESYNCED" == "yes" ]]; then
+            echo -e "  ${GREEN}✔  NTP jetzt synchronisiert${NC}"
+        else
+            echo -e "  ${YELLOW}⚠  Noch nicht sync — WireGuard-Handshake scheitert bei Zeitdrift >5 Min!${NC}"
+        fi
+        (( FIXES++ ))
+    fi
+    echo ""
+
+    # ─ Schritt 4: IP-Forwarding (IPv4 + IPv6) ───────────────────────────────
+    echo -e "${CYAN}[4/$TOTAL] IP-Forwarding:${NC}"
+    local IPV4_FWD IPV6_FWD FWD_FIXED=0
+    IPV4_FWD=$(sysctl -n net.ipv4.ip_forward 2>/dev/null || echo "?")
+    IPV6_FWD=$(sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null || echo "?")
+    if [[ "$IPV4_FWD" != "1" ]]; then
+        echo -e "  ${YELLOW}⚠  IPv4-Forwarding aus — aktiviere…${NC}"
+        sysctl -w net.ipv4.ip_forward=1 &>/dev/null
+        grep -q 'net.ipv4.ip_forward' /etc/sysctl.d/99-wg-forward.conf 2>/dev/null \
+            || echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.d/99-wg-forward.conf
+        FWD_FIXED=1
+    fi
+    if [[ "$IPV6_FWD" != "1" ]]; then
+        echo -e "  ${YELLOW}⚠  IPv6-Forwarding aus — aktiviere…${NC}"
+        sysctl -w net.ipv6.conf.all.forwarding=1 &>/dev/null
+        grep -q 'net.ipv6.conf.all.forwarding' /etc/sysctl.d/99-wg-forward.conf 2>/dev/null \
+            || echo 'net.ipv6.conf.all.forwarding = 1' >> /etc/sysctl.d/99-wg-forward.conf
+        FWD_FIXED=1
+    fi
+    if [[ $FWD_FIXED -eq 1 ]]; then
+        echo -e "  ${GREEN}✔  Forwarding aktiviert und dauerhaft gesichert${NC}"
+        (( FIXES++ ))
+    else
+        echo -e "  ${GREEN}✔  IPv4: ein  |  IPv6: ein${NC}"
+    fi
+    echo ""
+
+    # ─ Schritt 5: Privacy Extensions ────────────────────────────────────────
+    echo -e "${CYAN}[5/$TOTAL] Privacy Extensions (eth0):${NC}"
     local TEMPADDR
     TEMPADDR=$(sysctl -n net.ipv6.conf.eth0.use_tempaddr 2>/dev/null || echo "?")
     if [[ "$TEMPADDR" == "0" ]]; then
@@ -708,19 +783,35 @@ ipv6_autofix() {
     elif [[ "$TEMPADDR" == "?" ]]; then
         echo -e "  ${YELLOW}⚠  Nicht prüfbar${NC}"
     else
-        echo -e "  ${YELLOW}⚠  Privacy Extensions aktiv (use_tempaddr=$TEMPADDR) — deaktiviere…${NC}"
+        echo -e "  ${YELLOW}⚠  Privacy Extensions aktiv (use_tempaddr=$TEMPADDR) — deaktiviere dauerhaft…${NC}"
         echo 'net.ipv6.conf.eth0.use_tempaddr = 0' > /etc/sysctl.d/99-no-tempaddr.conf
         sysctl -w net.ipv6.conf.eth0.use_tempaddr=0 &>/dev/null
-        echo -e "  ${GREEN}✔  Behoben — gilt dauerhaft${NC}"
+        echo -e "  ${GREEN}✔  Behoben${NC}"
         (( FIXES++ ))
     fi
     echo ""
 
-    # ─ Schritt 3: DDNS-Record vs. aktuelle IPv6
-    echo -e "${CYAN}[3/5] DDNS-Abgleich ($VPN_HOST):${NC}"
+    # ─ Schritt 6: Aktuelle IPv6-Adresse ─────────────────────────────────────
+    echo -e "${CYAN}[6/$TOTAL] Aktuelle IPv6-Adresse:${NC}"
+    local CURRENT_IPV6
+    CURRENT_IPV6=$(ip -6 addr show eth0 2>/dev/null \
+        | grep 'scope global' \
+        | grep -v 'temporary' \
+        | awk '{print $2}' | cut -d'/' -f1 | head -1)
+    if [[ -z "$CURRENT_IPV6" ]]; then
+        echo -e "  ${RED}✘  Keine globale IPv6 auf eth0!${NC}"
+        echo -e "  ${DIM}→ IPv6 in Fritzbox aktiv? DHCP6 / RA aktiviert?${NC}"
+        (( ERRORS++ ))
+    else
+        echo -e "  ${GREEN}✔  $CURRENT_IPV6${NC}"
+    fi
+    echo ""
+
+    # ─ Schritt 7: DDNS-Record vs. aktuelle IPv6 ─────────────────────────────
+    echo -e "${CYAN}[7/$TOTAL] DDNS-Abgleich ($VPN_HOST):${NC}"
     if ! command -v dig &>/dev/null; then
         echo -e "  ${YELLOW}⚠  'dig' nicht installiert — übersprungen${NC}"
-        echo -e "  ${DIM}→ Option 1 im Diagnosemenü installieren${NC}"
+        echo -e "  ${DIM}→ Option 1 im Diagnosemenü: Tools installieren${NC}"
     else
         local DNS_IPV6
         DNS_IPV6=$(dig "$VPN_HOST" AAAA +short 2>/dev/null | head -1)
@@ -731,8 +822,10 @@ ipv6_autofix() {
         elif [[ "$DNS_IPV6" == "$CURRENT_IPV6" ]]; then
             echo -e "  ${GREEN}✔  DNS stimmt überein: $DNS_IPV6${NC}"
         else
-            echo -e "  ${YELLOW}⚠  Abweichung! DNS=$DNS_IPV6 / Raspi=$CURRENT_IPV6${NC}"
-            echo -e "  ${CYAN}→ ddns-go wird neugestartet…${NC}"
+            echo -e "  ${YELLOW}⚠  Abweichung!${NC}"
+            echo -e "     DNS:   $DNS_IPV6"
+            echo -e "     Raspi: $CURRENT_IPV6"
+            echo -e "  ${CYAN}→ ddns-go wird neugestartet um Update zu erzwingen…${NC}"
             docker restart ddns-go &>/dev/null \
                 && echo -e "  ${GREEN}✔  ddns-go neugestartet (Update läuft ~30s)${NC}" \
                 || echo -e "  ${RED}✘  Neustart fehlgeschlagen${NC}"
@@ -741,61 +834,109 @@ ipv6_autofix() {
     fi
     echo ""
 
-    # ─ Schritt 4: wg0 Interface
-    echo -e "${CYAN}[4/5] WireGuard Interface (wg0):${NC}"
+    # ─ Schritt 8: wireguard-ui Container ────────────────────────────────────
+    echo -e "${CYAN}[8/$TOTAL] wireguard-ui Container:${NC}"
+    local WUI_RUNNING
+    WUI_RUNNING=$(docker inspect -f '{{.State.Running}}' wireguard-ui 2>/dev/null || echo "false")
+    if [[ "$WUI_RUNNING" == "true" ]]; then
+        local WUI_RESTARTS
+        WUI_RESTARTS=$(docker inspect -f '{{.RestartCount}}' wireguard-ui 2>/dev/null || echo "0")
+        echo -e "  ${GREEN}✔  Läuft${NC}  ${DIM}(Restarts: $WUI_RESTARTS)${NC}"
+        [[ "$WUI_RESTARTS" -gt 5 ]] && echo -e "  ${YELLOW}⚠  $WUI_RESTARTS Neustarts — Logs prüfen: docker logs wireguard-ui${NC}"
+    else
+        echo -e "  ${RED}✘  wireguard-ui gestoppt — starte…${NC}"
+        docker compose -f "$COMPOSE_FILE" up -d wireguard-ui &>/dev/null \
+            && echo -e "  ${GREEN}✔  Gestartet — wg0 braucht ~10s${NC}" \
+            || { echo -e "  ${RED}✘  Fehler beim Starten${NC}"; (( ERRORS++ )); }
+        (( FIXES++ ))
+    fi
+    echo ""
+
+    # ─ Schritt 9: wg0 Interface & Handshake ─────────────────────────────────
+    echo -e "${CYAN}[9/$TOTAL] WireGuard Interface (wg0):${NC}"
     if ip link show wg0 &>/dev/null; then
         local HS
         HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
         if [[ -n "$HS" && "$HS" != "0" ]]; then
             local AGO=$(( $(date +%s) - HS ))
-            echo -e "  ${GREEN}✔  UP — letzter Handshake vor ${AGO}s${NC}"
-            [[ $AGO -gt 300 ]] && echo -e "  ${YELLOW}⚠  Kein Handshake seit über 5 Min — OPNsense prüfen${NC}"
+            if [[ $AGO -lt 300 ]]; then
+                echo -e "  ${GREEN}✔  UP — Handshake vor ${AGO}s${NC}"
+            else
+                echo -e "  ${YELLOW}⚠  UP — letzter Handshake vor ${AGO}s (>5 Min)${NC}"
+                echo -e "  ${DIM}→ OPNsense-Tunnel prüfen oder neu starten${NC}"
+            fi
         else
-            echo -e "  ${YELLOW}⚠  UP aber kein Handshake — warte auf OPNsense${NC}"
+            echo -e "  ${YELLOW}⚠  UP aber noch kein Handshake${NC}"
+            echo -e "  ${DIM}→ Warte auf OPNsense, oder Tunnel auf OPNsense-Seite neu starten${NC}"
         fi
     else
         echo -e "  ${RED}✘  wg0 nicht aktiv — starte wireguard-ui neu…${NC}"
         docker restart wireguard-ui &>/dev/null \
-            && echo -e "  ${GREEN}✔  wireguard-ui neugestartet${NC}" \
+            && echo -e "  ${GREEN}✔  wireguard-ui neugestartet — wg0 kommt gleich${NC}" \
             || echo -e "  ${RED}✘  Fehlgeschlagen${NC}"
         (( FIXES++ ))
     fi
     echo ""
 
-    # ─ Schritt 5: ddns-go Container
-    echo -e "${CYAN}[5/5] ddns-go Container:${NC}"
+    # ─ Schritt 10: ddns-go Container & API-Status ───────────────────────────
+    echo -e "${CYAN}[10/$TOTAL] ddns-go Container:${NC}"
     local DDNS_RUNNING
     DDNS_RUNNING=$(docker inspect -f '{{.State.Running}}' ddns-go 2>/dev/null || echo "false")
     if [[ "$DDNS_RUNNING" == "true" ]]; then
         local LAST_LOG
-        LAST_LOG=$(docker logs ddns-go --tail 3 2>&1 | tr '[:upper:]' '[:lower:]')
-        if echo "$LAST_LOG" | grep -qE "error|fail"; then
+        LAST_LOG=$(docker logs ddns-go --tail 5 2>&1 | tr '[:upper:]' '[:lower:]')
+        local DDNS_RESTARTS
+        DDNS_RESTARTS=$(docker inspect -f '{{.RestartCount}}' ddns-go 2>/dev/null || echo "0")
+        if echo "$LAST_LOG" | grep -qE "401|403|unauthorized|forbidden"; then
+            echo -e "  ${RED}✘  Cloudflare API-Fehler (Token ungültig / abgelaufen)!${NC}"
+            echo -e "  ${DIM}→ Token in ddns-go WebUI erneuern: http://$(raspi_ip):9876${NC}"
+            (( ERRORS++ ))
+        elif echo "$LAST_LOG" | grep -qE "error|fail"; then
             echo -e "  ${YELLOW}⚠  Fehler in Logs — starte neu…${NC}"
             docker restart ddns-go &>/dev/null \
                 && echo -e "  ${GREEN}✔  Neugestartet${NC}" \
                 || echo -e "  ${RED}✘  Fehlgeschlagen${NC}"
             (( FIXES++ ))
         else
-            echo -e "  ${GREEN}✔  Läuft ohne Fehler${NC}"
+            echo -e "  ${GREEN}✔  Läuft ohne Fehler${NC}  ${DIM}(Restarts: $DDNS_RESTARTS)${NC}"
         fi
     else
-        echo -e "  ${RED}✘  Gestoppt — starte…${NC}"
+        echo -e "  ${RED}✘  ddns-go gestoppt — starte…${NC}"
         docker compose -f "$COMPOSE_FILE" up -d ddns-go &>/dev/null \
             && echo -e "  ${GREEN}✔  Gestartet${NC}" \
-            || echo -e "  ${RED}✘  Fehler${NC}"
+            || { echo -e "  ${RED}✘  Fehler${NC}"; (( ERRORS++ )); }
         (( FIXES++ ))
     fi
     echo ""
 
-    # ─ Zusammenfassung
+    # ─ Schritt 11: Disk-Speicher ─────────────────────────────────────────────
+    echo -e "${CYAN}[11/$TOTAL] Disk-Speicher:${NC}"
+    local DISK_USE
+    DISK_USE=$(df / --output=pcent 2>/dev/null | tail -1 | tr -d ' %')
+    if [[ -z "$DISK_USE" ]]; then
+        echo -e "  ${YELLOW}⚠  Nicht prüfbar${NC}"
+    elif [[ "$DISK_USE" -ge 95 ]]; then
+        echo -e "  ${RED}✘  Kritisch: ${DISK_USE}% belegt!${NC}"
+        echo -e "  ${DIM}→ docker system prune -f  kann Platz freigeben${NC}"
+        (( ERRORS++ ))
+    elif [[ "$DISK_USE" -ge 85 ]]; then
+        echo -e "  ${YELLOW}⚠  ${DISK_USE}% belegt — bald voll${NC}"
+        echo -e "  ${DIM}→ docker system prune -f empfohlen${NC}"
+    else
+        echo -e "  ${GREEN}✔  ${DISK_USE}% belegt${NC}"
+    fi
+    echo ""
+
+    # ─ Zusammenfassung ───────────────────────────────────────────────────────
     echo -e "${BOLD}═══ Ergebnis ═══${NC}"
     if [[ $ERRORS -eq 0 && $FIXES -eq 0 ]]; then
         echo -e "  ${GREEN}✔  Alles in Ordnung — keine Probleme gefunden${NC}"
     elif [[ $ERRORS -eq 0 ]]; then
         echo -e "  ${GREEN}✔  $FIXES Problem(e) automatisch behoben${NC}"
-        echo -e "  ${DIM}→ Warte ~60s, dann OPNsense-Tunnel neu starten${NC}"
+        echo -e "  ${DIM}→ Warte ~60s, dann OPNsense-Tunnel neu starten damit Handshake klappt${NC}"
     else
-        echo -e "  ${YELLOW}⚠  $FIXES behoben, $ERRORS Fehler benötigen manuelle Prüfung${NC}"
+        echo -e "  ${YELLOW}⚠  $FIXES behoben — $ERRORS Fehler benötigen manuelle Prüfung (siehe oben)${NC}"
+        [[ $FIXES -gt 0 ]] && echo -e "  ${DIM}→ Warte ~60s, dann OPNsense-Tunnel neu starten${NC}"
     fi
 }
 
