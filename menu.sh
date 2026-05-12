@@ -148,7 +148,7 @@ main_menu_whiptail() {
             26 84 10 \
             "1" "  🔧  Setup & Installation" \
             "2" "  📊  Status & Monitoring" \
-            "3" "  🐳  Container-Verwaltung" \
+            "3" "  🐳  VPN-Dienste verwalten" \
             "4" "  ⚙️  Konfiguration & Updates" \
             "5" "  🔄  Reset & Deinstallation" \
             "6" "  🌐  WebUI-Adressen anzeigen" \
@@ -179,10 +179,10 @@ menu_setup_wt() {
             --title "PI-VPN | Setup & Installation" \
             --menu "\nWelche Aktion soll ausgeführt werden?" \
             20 68 6 \
-            "1" "  Vollständige Installation  (setup-wizard.sh)" \
-            "2" "  Nur Docker CE installieren (install-docker.sh)" \
-            "3" "  Verzeichnisse anlegen       (init.sh)" \
-            "4" "  Dashboard nachinstallieren  (install-dashboard.sh)" \
+            "1" "  Vollständige Installation       (setup-wizard.sh)" \
+            "2" "  Dashboard nachinstallieren  (install-dashboard.sh)" \
+            "3" "  Nur Docker CE installieren     (install-docker.sh)" \
+            "4" "  Verzeichnisse anlegen                    (init.sh)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -194,17 +194,17 @@ menu_setup_wt() {
                 ;;
             2)
                 clear
-                bash "$SETUP_DIR/install-docker.sh"
+                bash "$SETUP_DIR/install-dashboard.sh"
                 press_enter
                 ;;
             3)
                 clear
-                bash "$SETUP_DIR/init.sh"
+                bash "$SETUP_DIR/install-docker.sh"
                 press_enter
                 ;;
             4)
                 clear
-                bash "$SETUP_DIR/install-dashboard.sh"
+                bash "$SETUP_DIR/init.sh"
                 press_enter
                 ;;
             0|"") return ;;
@@ -292,17 +292,15 @@ menu_container_wt() {
 
         local CHOICE
         CHOICE=$(whiptail \
-            --title "PI-VPN | Container-Verwaltung" \
+            --title "PI-VPN | VPN-Dienste verwalten" \
             --menu "${STATUS_INFO}\n\nWelche Aktion?" \
-            24 72 9 \
+            22 72 7 \
             "1" "  Alle Container starten" \
             "2" "  Alle Container stoppen" \
             "3" "  Alle Container neu starten" \
             "4" "  wireguard-ui neu starten" \
             "5" "  ddns-go neu starten" \
-            "6" "  Konfig-Backup erstellen   (backup.sh)" \
-            "7" "  Backup wiederherstellen   (restore.sh)" \
-            "8" "  Container-Logs live verfolgen (Ctrl+C zum Beenden)" \
+            "6" "  Live-Logs verfolgen  (Ctrl+C zum Beenden)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -352,16 +350,6 @@ menu_container_wt() {
                 press_enter
                 ;;
             6)
-                clear
-                bash "$MANAGE_DIR/backup.sh"
-                press_enter
-                ;;
-            7)
-                clear
-                bash "$MANAGE_DIR/restore.sh"
-                press_enter
-                ;;
-            8)
                 clear
                 echo -e "${BOLD}Live-Logs (Ctrl+C zum Beenden):${NC}\n"
                 docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true
@@ -493,42 +481,27 @@ menu_diag_wt() {
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
             24 72 10 \
-            "1" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
-            "2" "  WireGuard Handshake prüfen" \
-            "3" "  DNS-Auflösung testen  ($VPN_HOST)" \
-            "4" "  Ping VPN-Peer     (aus wg0)" \
-            "5" "  Ping Heimnetz-Gateway  ($HAUPT_GW)" \
-            "6" "  IPv6-Adresse prüfen" \
-            "7" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
-            "8" "  Alle Tests auf einmal" \
-            "9" "  🔧  IPv6-Autofix (prüfen & automatisch beheben)" \
+            "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
+            "2" "  Alle Tests auf einmal" \
+            "3" "  WireGuard Handshake prüfen" \
+            "4" "  DNS-Auflösung testen  ($VPN_HOST)" \
+            "5" "  IPv6-Adresse prüfen" \
+            "6" "  Ping VPN-Peer  (aus wg0)" \
+            "7" "  Ping Heimnetz-Gateway  ($HAUPT_GW)" \
+            "8" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
+            "9" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
         case "$CHOICE" in
             1)
                 clear
-                echo -e "${BOLD}Tools installieren…${NC}\n"
-                local TO_INSTALL=""
-                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
-                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
-                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
-                if [[ -z "$TO_INSTALL" ]]; then
-                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert:${NC}"
-                    echo -e "     tcpdump $(tcpdump --version 2>&1 | head -1)"
-                    echo -e "     dig     $(dig -v 2>&1 | head -1)"
-                    echo -e "     nmap    $(nmap --version 2>&1 | head -1)"
-                else
-                    echo -e "  Installiere:${YELLOW}$TO_INSTALL${NC}\n"
-                    apt-get install -y $TO_INSTALL \
-                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
-                        || echo -e "\n  ${RED}✘  Fehler bei der Installation${NC}"
-                fi
+                ipv6_autofix
                 press_enter
                 ;;
             2)
                 clear
-                echo -e "${BOLD}WireGuard Handshake-Status:${NC}\n"
+                echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
                 if ! ip link show wg0 &>/dev/null; then
                     echo -e "  ${RED}✘  wg0-Interface nicht aktiv.${NC}"
                     echo -e "  ${DIM}→ Container starten: Menu 3 → Alle Container starten${NC}"
@@ -677,9 +650,121 @@ menu_diag_wt() {
                 echo -e "${BOLD}═══ Report Ende ═══${NC}"
                 press_enter
                 ;;
+            3)
+                clear
+                echo -e "${BOLD}WireGuard Handshake-Status:${NC}\n"
+                if ! ip link show wg0 &>/dev/null; then
+                    echo -e "  ${RED}✘  wg0-Interface nicht aktiv.${NC}"
+                    echo -e "  ${DIM}→ Container starten: Menu 3 → Alle Container starten${NC}"
+                else
+                    wg show wg0 2>/dev/null
+                    echo ""
+                    local HS
+                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    if [[ -n "$HS" && "$HS" != "0" ]]; then
+                        local AGO=$(( $(date +%s) - HS ))
+                        echo -e "  ${GREEN}✔  Letzter Handshake vor ${AGO}s${NC}"
+                        [[ $AGO -gt 180 ]] && echo -e "  ${YELLOW}⚠  Handshake älter als 3 Minuten — Verbindung möglicherweise unterbrochen${NC}"
+                    else
+                        echo -e "  ${RED}✘  Kein Handshake — Gegenstelle nicht verbunden${NC}"
+                        echo -e "  ${DIM}→ Prüfe: Endpoint, Firewall, Port 51820${NC}"
+                    fi
+                fi
+                press_enter
+                ;;
+            4)
+                clear
+                echo -e "${BOLD}DNS-Auflösung: ${VPN_HOST}${NC}\n"
+                if ! command -v dig &>/dev/null; then
+                    echo -e "  ${YELLOW}⚠  'dig' nicht installiert → Option 9 wählen${NC}"
+                else
+                    echo -e "  ${CYAN}A-Record (IPv4):${NC}"
+                    dig "$VPN_HOST" A +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    echo ""
+                    echo -e "  ${CYAN}AAAA-Record (IPv6):${NC}"
+                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (kein Ergebnis)"
+                    echo ""
+                    echo -e "  ${CYAN}Aktuelle IPv6 dieses Raspi:${NC}"
+                    ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}' || echo "    (nicht ermittelbar)"
+                fi
+                press_enter
+                ;;
+            5)
+                clear
+                echo -e "${BOLD}IPv6-Adresse dieses Raspi:${NC}\n"
+                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | while read -r line; do
+                    echo "  $line"
+                done
+                echo ""
+                echo -e "  ${CYAN}Öffentliche IPv6 (extern):${NC}"
+                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' \
+                    || echo -e "    ${YELLOW}⚠  Kein IPv6-Internet erreichbar${NC}"
+                echo ""
+                echo -e "  ${CYAN}AAAA in DNS (${VPN_HOST}):${NC}"
+                if command -v dig &>/dev/null; then
+                    dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /' || echo "    (nicht auflösbar)"
+                else
+                    echo -e "    ${DIM}dig nicht installiert → Option 9${NC}"
+                fi
+                press_enter
+                ;;
+            6)
+                clear
+                local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
+                if [[ -z "$PEER_IP" ]]; then
+                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
+                elif ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  VPN-Peer erreichbar — Tunnel aktiv${NC}" \
+                        || echo -e "\n  ${RED}✘  VPN-Peer nicht erreichbar — Tunnel unterbrochen?${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
+                fi
+                press_enter
+                ;;
+            7)
+                clear
+                echo -e "${BOLD}Ping Heimnetz-Gateway (${HAUPT_GW}):${NC}\n"
+                if ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Hauptwohnsitz-Gateway erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar — Routing oder iptables-Regeln prüfen${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv — kein Tunnel aufgebaut${NC}"
+                fi
+                press_enter
+                ;;
+            8)
+                clear
+                if ! command -v tcpdump &>/dev/null; then
+                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert.${NC}"
+                    echo -e "  ${DIM}→ Option 9 wählen um Tools zu installieren${NC}"
+                else
+                    echo -e "${BOLD}tcpdump — lausche auf UDP Port 51820 (eth0)${NC}"
+                    echo -e "${DIM}Aktiviere jetzt WireGuard auf dem Gegenstück. Ctrl+C zum Beenden.${NC}\n"
+                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
+                fi
+                press_enter
+                ;;
             9)
                 clear
-                ipv6_autofix
+                echo -e "${BOLD}Tools installieren…${NC}\n"
+                local TO_INSTALL=""
+                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
+                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
+                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
+                if [[ -z "$TO_INSTALL" ]]; then
+                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert:${NC}"
+                    echo -e "     tcpdump $(tcpdump --version 2>&1 | head -1)"
+                    echo -e "     dig     $(dig -v 2>&1 | head -1)"
+                    echo -e "     nmap    $(nmap --version 2>&1 | head -1)"
+                else
+                    echo -e "  Installiere:${YELLOW}$TO_INSTALL${NC}\n"
+                    apt-get install -y $TO_INSTALL \
+                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
+                        || echo -e "\n  ${RED}✘  Fehler bei der Installation${NC}"
+                fi
                 press_enter
                 ;;
             0|"") return ;;
@@ -1054,18 +1139,21 @@ text_backup() {
 }
 
 text_setup() {
-        echo -e "  ${BOLD}[1]${NC}  Vollständige Installation  (setup-wizard.sh)"
-        echo -e "  ${BOLD}[2]${NC}  Nur Docker CE installieren (install-docker.sh)"
-        echo -e "  ${BOLD}[3]${NC}  Verzeichnisse anlegen      (init.sh)"
-        echo -e "  ${BOLD}[4]${NC}  Dashboard nachinstallieren (install-dashboard.sh)"
+    while true; do
+        clear; blank
+        echo -e "  ${BOLD}[SETUP] Setup & Installation${NC}"; blank
+        echo -e "  ${BOLD}[1]${NC}  Vollständige Installation       (setup-wizard.sh)"
+        echo -e "  ${BOLD}[2]${NC}  Dashboard nachinstallieren  (install-dashboard.sh)"
+        echo -e "  ${BOLD}[3]${NC}  Nur Docker CE installieren     (install-docker.sh)"
+        echo -e "  ${BOLD}[4]${NC}  Verzeichnisse anlegen                    (init.sh)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
         case "$C" in
             1) clear; bash "$SETUP_DIR/setup-wizard.sh"; press_enter ;;
-            2) clear; bash "$SETUP_DIR/install-docker.sh"; press_enter ;;
-            3) clear; bash "$SETUP_DIR/init.sh"; press_enter ;;
-            4) clear; bash "$SETUP_DIR/install-dashboard.sh"; press_enter ;;
+            2) clear; bash "$SETUP_DIR/install-dashboard.sh"; press_enter ;;
+            3) clear; bash "$SETUP_DIR/install-docker.sh"; press_enter ;;
+            4) clear; bash "$SETUP_DIR/init.sh"; press_enter ;;
             0|"") return ;;
         esac
     done
@@ -1099,16 +1187,14 @@ text_status() {
 text_container() {
     while true; do
         clear; blank
-        echo -e "  ${BOLD}[CONTAINER] Container-Verwaltung${NC}"
+        echo -e "  ${BOLD}[CONTAINER] VPN-Dienste verwalten${NC}"
         echo -e "  ${DIM}wireguard-ui: $(docker inspect -f '{{.State.Status}}' wireguard-ui 2>/dev/null || echo 'n/a')  |  ddns-go: $(docker inspect -f '{{.State.Status}}' ddns-go 2>/dev/null || echo 'n/a')${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  Alle Container starten"
         echo -e "  ${BOLD}[2]${NC}  Alle Container stoppen"
         echo -e "  ${BOLD}[3]${NC}  Alle Container neu starten"
         echo -e "  ${BOLD}[4]${NC}  wireguard-ui neu starten"
         echo -e "  ${BOLD}[5]${NC}  ddns-go neu starten"
-        echo -e "  ${BOLD}[6]${NC}  Backup erstellen     (backup.sh)"
-        echo -e "  ${BOLD}[7]${NC}  Backup wiederherstellen (restore.sh)"
-        echo -e "  ${BOLD}[8]${NC}  Live-Logs (Ctrl+C zum Beenden)"
+        echo -e "  ${BOLD}[6]${NC}  Live-Logs (Ctrl+C zum Beenden)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
@@ -1121,9 +1207,7 @@ text_container() {
             3) clear; docker compose -f "$COMPOSE_FILE" restart; press_enter ;;
             4) clear; docker restart wireguard-ui; press_enter ;;
             5) clear; docker restart ddns-go; press_enter ;;
-            6) clear; bash "$MANAGE_DIR/backup.sh"; press_enter ;;
-            7) clear; bash "$MANAGE_DIR/restore.sh"; press_enter ;;
-            8) clear; docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true; press_enter ;;
+            6) clear; docker compose -f "$COMPOSE_FILE" logs -f --tail 20 2>&1 || true; press_enter ;;
             0|"") return ;;
         esac
     done
@@ -1179,109 +1263,25 @@ text_diag() {
     while true; do
         clear; blank
         echo -e "  ${BOLD}[DIAGNOSE] Diagnose & Tools${NC}"; blank
-        echo -e "  ${BOLD}[1]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
-        echo -e "  ${BOLD}[2]${NC}  WireGuard Handshake prüfen"
-        echo -e "  ${BOLD}[3]${NC}  DNS-Auflösung testen  ($VPN_HOST)"
-        echo -e "  ${BOLD}[4]${NC}  Ping VPN-Peer  (aus wg0)"
-        echo -e "  ${BOLD}[5]${NC}  Ping Heimnetz-Gateway  ($HAUPT_GW)"
-        echo -e "  ${BOLD}[6]${NC}  IPv6-Adresse prüfen"
-        echo -e "  ${BOLD}[7]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
-        echo -e "  ${BOLD}[8]${NC}  Alle Tests auf einmal"
-        echo -e "  ${BOLD}[9]${NC}  IPv6-Autofix (prüfen & automatisch beheben)"
+        echo -e "  ${BOLD}[1]${NC}  🔧  System-Autofix  (prüfen & automatisch beheben)"
+        echo -e "  ${BOLD}[2]${NC}  Alle Tests auf einmal"
+        echo -e "  ${BOLD}[3]${NC}  WireGuard Handshake prüfen"
+        echo -e "  ${BOLD}[4]${NC}  DNS-Auflösung testen  ($VPN_HOST)"
+        echo -e "  ${BOLD}[5]${NC}  IPv6-Adresse prüfen"
+        echo -e "  ${BOLD}[6]${NC}  Ping VPN-Peer  (aus wg0)"
+        echo -e "  ${BOLD}[7]${NC}  Ping Heimnetz-Gateway  ($HAUPT_GW)"
+        echo -e "  ${BOLD}[8]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
+        echo -e "  ${BOLD}[9]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
         case "$C" in
             1)
                 clear
-                echo -e "${BOLD}Tools installieren…${NC}\n"
-                local TO_INSTALL=""
-                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
-                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
-                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
-                if [[ -z "$TO_INSTALL" ]]; then
-                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert${NC}"
-                else
-                    apt-get install -y $TO_INSTALL \
-                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
-                        || echo -e "\n  ${RED}✘  Fehler${NC}"
-                fi
+                ipv6_autofix
                 press_enter
                 ;;
             2)
-                clear
-                echo -e "${BOLD}WireGuard Handshake:${NC}\n"
-                if ip link show wg0 &>/dev/null; then
-                    wg show wg0 2>/dev/null
-                    local HS
-                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
-                    if [[ -n "$HS" && "$HS" != "0" ]]; then
-                        local AGO=$(( $(date +%s) - HS ))
-                        echo -e "\n  ${GREEN}✔  Handshake vor ${AGO}s${NC}"
-                    else
-                        echo -e "\n  ${RED}✘  Kein Handshake${NC}"
-                    fi
-                else
-                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
-                fi
-                press_enter
-                ;;
-            3)
-                clear
-                echo -e "${BOLD}DNS: ${VPN_HOST}${NC}\n"
-                if command -v dig &>/dev/null; then
-                    echo -e "  ${CYAN}A-Record:${NC}";    dig "$VPN_HOST" A    +short 2>/dev/null | sed 's/^/    /'
-                    echo -e "  ${CYAN}AAAA-Record:${NC}"; dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /'
-                    echo -e "  ${CYAN}Raspi IPv6:${NC}";  ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}'
-                else
-                    echo -e "  ${YELLOW}⚠  dig nicht installiert → Option 1${NC}"
-                fi
-                press_enter
-                ;;
-            4)
-                clear
-                local PEER_IP; PEER_IP=$(vpn_peer_ip)
-                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
-                if [[ -z "$PEER_IP" ]]; then
-                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
-                elif ip link show wg0 &>/dev/null; then
-                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
-                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
-                        || echo -e "\n  ${RED}✘  Nicht erreichbar${NC}"
-                else
-                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
-                fi
-                press_enter
-                ;;
-            5)
-                clear
-                echo -e "${BOLD}Ping ${HAUPT_GW} (Hauptwohnsitz):${NC}\n"
-                ip link show wg0 &>/dev/null \
-                    && { ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
-                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
-                        || echo -e "\n  ${RED}✘  Nicht erreichbar — iptables prüfen${NC}"; } \
-                    || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
-                press_enter
-                ;;
-            6)
-                clear
-                echo -e "${BOLD}IPv6-Adresse:${NC}\n"
-                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | sed 's/^/  /'
-                echo -e "\n  ${CYAN}Öffentliche IPv6:${NC}"
-                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' || echo -e "    ${YELLOW}nicht erreichbar${NC}"
-                press_enter
-                ;;
-            7)
-                clear
-                if command -v tcpdump &>/dev/null; then
-                    echo -e "${BOLD}tcpdump UDP 51820 (Ctrl+C zum Beenden):${NC}\n"
-                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
-                else
-                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert → Option 1${NC}"
-                fi
-                press_enter
-                ;;
-            8)
                 clear
                 echo -e "${BOLD}═══ Vollständiger Diagnose-Report ═══${NC}\n"
                 echo -e "${CYAN}[1/4] WireGuard:${NC}"
@@ -1302,7 +1302,7 @@ text_diag() {
                     [[ -n "$A" ]]    && echo -e "  A:    ${GREEN}$A${NC}"    || echo -e "  A:    ${YELLOW}(kein Eintrag)${NC}"
                     [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}$AAAA${NC}" || echo -e "  AAAA: ${YELLOW}(kein Eintrag)${NC}"
                 else
-                    echo -e "  ${DIM}dig nicht installiert${NC}"
+                    echo -e "  ${DIM}dig nicht installiert → Option 9${NC}"
                 fi
                 echo -e "\n${CYAN}[3/4] Erreichbarkeit:${NC}"
                 if ip link show wg0 &>/dev/null; then
@@ -1322,9 +1322,93 @@ text_diag() {
                 echo -e "\n${BOLD}═══ Report Ende ═══${NC}"
                 press_enter
                 ;;
+            3)
+                clear
+                echo -e "${BOLD}WireGuard Handshake:${NC}\n"
+                if ip link show wg0 &>/dev/null; then
+                    wg show wg0 2>/dev/null
+                    local HS
+                    HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+                    if [[ -n "$HS" && "$HS" != "0" ]]; then
+                        local AGO=$(( $(date +%s) - HS ))
+                        echo -e "\n  ${GREEN}✔  Handshake vor ${AGO}s${NC}"
+                    else
+                        echo -e "\n  ${RED}✘  Kein Handshake${NC}"
+                    fi
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
+                press_enter
+                ;;
+            4)
+                clear
+                echo -e "${BOLD}DNS: ${VPN_HOST}${NC}\n"
+                if command -v dig &>/dev/null; then
+                    echo -e "  ${CYAN}A-Record:${NC}";    dig "$VPN_HOST" A    +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}AAAA-Record:${NC}"; dig "$VPN_HOST" AAAA +short 2>/dev/null | sed 's/^/    /'
+                    echo -e "  ${CYAN}Raspi IPv6:${NC}";  ip -6 addr show eth0 2>/dev/null | grep 'scope global' | awk '{print "    " $2}'
+                else
+                    echo -e "  ${YELLOW}⚠  dig nicht installiert → Option 9${NC}"
+                fi
+                press_enter
+                ;;
+            5)
+                clear
+                echo -e "${BOLD}IPv6-Adresse:${NC}\n"
+                ip -6 addr show eth0 2>/dev/null | grep -E 'scope (global|link)' | sed 's/^/  /'
+                echo -e "\n  ${CYAN}Öffentliche IPv6:${NC}"
+                curl -6 -s --max-time 5 ifconfig.co 2>/dev/null | sed 's/^/    /' || echo -e "    ${YELLOW}nicht erreichbar${NC}"
+                press_enter
+                ;;
+            6)
+                clear
+                local PEER_IP; PEER_IP=$(vpn_peer_ip)
+                echo -e "${BOLD}Ping VPN-Peer (${PEER_IP:-kein Peer konfiguriert}):${NC}\n"
+                if [[ -z "$PEER_IP" ]]; then
+                    echo -e "  ${YELLOW}⚠  Kein Peer in wg0 gefunden — Container gestartet?${NC}"
+                elif ip link show wg0 &>/dev/null; then
+                    ping -c 4 -W 2 "$PEER_IP" 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar${NC}"
+                else
+                    echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                fi
+                press_enter
+                ;;
+            7)
+                clear
+                echo -e "${BOLD}Ping ${HAUPT_GW} (Hauptwohnsitz):${NC}\n"
+                ip link show wg0 &>/dev/null \
+                    && { ping -c 4 -W 2 "$HAUPT_GW" 2>/dev/null \
+                        && echo -e "\n  ${GREEN}✔  Erreichbar${NC}" \
+                        || echo -e "\n  ${RED}✘  Nicht erreichbar — iptables prüfen${NC}"; } \
+                    || echo -e "  ${RED}✘  wg0 nicht aktiv${NC}"
+                press_enter
+                ;;
+            8)
+                clear
+                if command -v tcpdump &>/dev/null; then
+                    echo -e "${BOLD}tcpdump UDP 51820 (Ctrl+C zum Beenden):${NC}\n"
+                    tcpdump -i eth0 udp port 51820 -n 2>&1 || true
+                else
+                    echo -e "  ${YELLOW}⚠  tcpdump nicht installiert → Option 9${NC}"
+                fi
+                press_enter
+                ;;
             9)
                 clear
-                ipv6_autofix
+                echo -e "${BOLD}Tools installieren…${NC}\n"
+                local TO_INSTALL=""
+                command -v tcpdump &>/dev/null || TO_INSTALL="$TO_INSTALL tcpdump"
+                command -v dig    &>/dev/null || TO_INSTALL="$TO_INSTALL dnsutils"
+                command -v nmap   &>/dev/null || TO_INSTALL="$TO_INSTALL nmap"
+                if [[ -z "$TO_INSTALL" ]]; then
+                    echo -e "  ${GREEN}✔  Alle Tools bereits installiert${NC}"
+                else
+                    apt-get install -y $TO_INSTALL \
+                        && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
+                        || echo -e "\n  ${RED}✘  Fehler${NC}"
+                fi
                 press_enter
                 ;;
             0|"") return ;;
