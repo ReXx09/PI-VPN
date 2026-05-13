@@ -505,7 +505,7 @@ menu_diag_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
-            28 72 12 \
+            30 72 14 \
             "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
             "2" "  Alle Tests auf einmal" \
             "3" "  WireGuard Handshake prüfen" \
@@ -517,6 +517,8 @@ menu_diag_wt() {
             "9" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "10" " 🌐  IPv6-Präfix aktualisieren  (nach Präfixwechsel)" \
             "11" " 📌  IPv6-Suffix fixieren       (Dauerlösung)" \
+            "12" " 📋  Vollständiger Diagnose-Report  (check.sh)" \
+            "13" " 🔨  Automatische Reparatur         (repair.sh)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -704,6 +706,16 @@ menu_diag_wt() {
                 ;;
             11)
                 setup_ipv6_fixed_suffix
+                ;;
+            12)
+                clear
+                bash "$MANAGE_DIR/check.sh"
+                press_enter
+                ;;
+            13)
+                clear
+                bash "$MANAGE_DIR/repair.sh"
+                press_enter
                 ;;
             0|"") return ;;
         esac
