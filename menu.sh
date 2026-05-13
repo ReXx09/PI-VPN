@@ -505,7 +505,7 @@ menu_diag_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
-            24 72 10 \
+            26 72 11 \
             "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
             "2" "  Alle Tests auf einmal" \
             "3" "  WireGuard Handshake prüfen" \
@@ -515,6 +515,7 @@ menu_diag_wt() {
             "7" "  Ping Heimnetz-Gateway  ($HAUPT_GW)" \
             "8" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
             "9" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
+            "10" " 🌐  IPv6-Präfix aktualisieren  (nach Präfixwechsel)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -695,6 +696,11 @@ menu_diag_wt() {
                 fi
                 press_enter
                 ;;
+            10)
+                clear
+                prefix_fix
+                press_enter
+                ;;
             0|"") return ;;
         esac
     done
@@ -703,6 +709,99 @@ menu_diag_wt() {
 # =============================================================================
 # TEXT-FALLBACK — einfaches Textmenü (ohne whiptail)
 # =============================================================================
+
+# IPv6-Präfix-Fix: erkennt Präfixwechsel und triggert ddns-go Force-Update
+prefix_fix() {
+    echo -e "${BOLD}═══ IPv6-Präfix-Fix ═══${NC}\n"
+    echo -e "${DIM}Bei DS-Lite (Vodafone Kabel) kann sich der IPv6-Präfix täglich ändern.${NC}"
+    echo -e "${DIM}Dieses Tool vergleicht die aktuelle IP mit dem DNS-Record und korrigiert.${NC}\n"
+
+    # ─ 1. Aktuelle IPv6 ermitteln ────────────────────────────────────────────
+    echo -e "${CYAN}[1/4] Aktuelle IPv6-Adresse ermitteln…${NC}"
+    local IF_IPV6 EXT_IPV6
+    IF_IPV6=$(ip -6 addr show eth0 2>/dev/null \
+        | awk '/scope global/{print $2}' | cut -d'/' -f1 | head -1)
+    EXT_IPV6=$(curl -6 -s --max-time 8 ifconfig.co 2>/dev/null)
+
+    echo -e "  Interface eth0:  ${IF_IPV6:-${YELLOW}nicht ermittelbar${NC}}"
+    echo -e "  Extern (public): ${EXT_IPV6:-${RED}kein IPv6-Internet${NC}}"
+
+    if [[ -z "$EXT_IPV6" ]]; then
+        echo -e "\n  ${RED}✘  Kein IPv6-Internet erreichbar — Präfix-Fix nicht möglich.${NC}"
+        echo -e "  ${DIM}→ Fritzbox neu starten oder Vodafone-Störung prüfen${NC}\n"
+        return 1
+    fi
+    echo ""
+
+    # ─ 2. DNS AAAA-Record lesen ──────────────────────────────────────────────
+    echo -e "${CYAN}[2/4] DNS-Record prüfen ($VPN_HOST)…${NC}"
+    local DNS_IPV6=""
+    if command -v dig &>/dev/null; then
+        DNS_IPV6=$(dig "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1)
+    else
+        echo -e "  ${YELLOW}⚠  dig nicht installiert — Option 9: Tools installieren${NC}"
+    fi
+    echo -e "  DNS AAAA:        ${DNS_IPV6:-${YELLOW}nicht auflösbar${NC}}"
+    echo ""
+
+    # ─ 3. Vergleich ──────────────────────────────────────────────────────────
+    echo -e "${CYAN}[3/4] Vergleich:${NC}"
+    if [[ -n "$DNS_IPV6" && "$EXT_IPV6" == "$DNS_IPV6" ]]; then
+        echo -e "  ${GREEN}✔  DNS stimmt überein — kein Präfixwechsel erkannt.${NC}"
+        echo -e "  ${DIM}→ Wenn VPN trotzdem nicht geht:${NC}"
+        echo -e "  ${DIM}   • WireGuard Handshake prüfen (Option 3)${NC}"
+        echo -e "  ${DIM}   • Fritzbox IPv6-Portfreigabe prüfen (UDP 51820)${NC}"
+        echo ""
+        return 0
+    fi
+
+    if [[ -z "$DNS_IPV6" ]]; then
+        echo -e "  ${YELLOW}⚠  DNS-Record nicht auflösbar — ddns-go läuft möglicherweise nicht${NC}"
+    else
+        echo -e "  ${RED}✘  Präfixwechsel erkannt!${NC}"
+        echo -e "  ${DIM}   DNS zeigt:     $DNS_IPV6${NC}"
+        echo -e "  ${DIM}   Aktuell wäre:  $EXT_IPV6${NC}"
+    fi
+    echo ""
+
+    # ─ 4. ddns-go neu starten (Force-Update) ─────────────────────────────────
+    echo -e "${CYAN}[4/4] ddns-go Force-Update…${NC}"
+    if ! (cd "$DOCKER_DIR" && docker compose restart ddns-go 2>/dev/null); then
+        echo -e "  ${RED}✘  ddns-go konnte nicht neu gestartet werden${NC}"
+        echo -e "  ${DIM}→ docker compose -f $COMPOSE_FILE ps${NC}"
+        echo ""
+        return 1
+    fi
+    echo -e "  ${GREEN}✔  ddns-go neugestartet — warte 12s auf DNS-Propagation…${NC}"
+    sleep 12
+
+    # Re-check DNS
+    local DNS_NEW=""
+    if command -v dig &>/dev/null; then
+        DNS_NEW=$(dig "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1)
+    fi
+    echo -e "  DNS nach Update: ${DNS_NEW:-${YELLOW}noch nicht auflösbar${NC}}"
+    echo ""
+
+    if [[ -n "$DNS_NEW" && "$DNS_NEW" == "$EXT_IPV6" ]]; then
+        echo -e "  ${GREEN}✔  DNS erfolgreich aktualisiert!${NC}"
+        echo ""
+        echo -e "${CYAN}→ WireGuard zurücksetzen (Peers verbinden mit neuer IP)…${NC}"
+        if (cd "$DOCKER_DIR" && docker compose restart wireguard-ui 2>/dev/null); then
+            echo -e "  ${GREEN}✔  wireguard-ui neugestartet — VPN baut sich neu auf${NC}"
+            echo -e "  ${DIM}→ Warte ~30s, dann Option 3 (Handshake prüfen)${NC}"
+        else
+            echo -e "  ${YELLOW}⚠  wireguard-ui Neustart fehlgeschlagen${NC}"
+            echo -e "  ${DIM}→ Manuell: docker compose restart wireguard-ui${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠  DNS noch nicht aktualisiert (TTL-Cache oder ddns-go-Fehler)${NC}"
+        echo -e "  ${DIM}→ ddns-go WebUI prüfen: http://$(hostname -I | awk '{print $1}'):9876${NC}"
+        echo -e "  ${DIM}→ Cloudflare TTL auf 60s setzen (Autofix Schritt 13)${NC}"
+        echo -e "  ${DIM}→ In 2-3 Minuten erneut versuchen${NC}"
+    fi
+    echo ""
+}
 
 # IPv6-Autofix-Funktion (geteilt von whiptail + text)
 ipv6_autofix() {
