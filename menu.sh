@@ -708,7 +708,7 @@ menu_diag_wt() {
 ipv6_autofix() {
     local FIXES=0
     local ERRORS=0
-    local TOTAL=11
+    local TOTAL=13
 
     echo -e "${BOLD}═══ System-Autofix & Diagnose ═══${NC}\n"
 
@@ -954,6 +954,59 @@ ipv6_autofix() {
         echo -e "  ${DIM}→ docker system prune -f empfohlen${NC}"
     else
         echo -e "  ${GREEN}✔  ${DISK_USE}% belegt${NC}"
+    fi
+    echo ""
+
+    # ─ Schritt 12: SSH-Daemon & Fernzugriff ─────────────────────────────────
+    echo -e "${CYAN}[12/$TOTAL] SSH-Daemon & Fernzugriff:${NC}"
+    local SSH_SVC=""
+    if systemctl is-active --quiet ssh  2>/dev/null; then SSH_SVC="ssh"
+    elif systemctl is-active --quiet sshd 2>/dev/null; then SSH_SVC="sshd"
+    fi
+    if [[ -n "$SSH_SVC" ]]; then
+        echo -e "  ${GREEN}✔  sshd läuft ($SSH_SVC)${NC}"
+    else
+        echo -e "  ${RED}✘  sshd nicht aktiv — starte…${NC}"
+        systemctl start ssh &>/dev/null || systemctl start sshd &>/dev/null
+        if systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
+            echo -e "  ${GREEN}✔  sshd gestartet${NC}"
+            (( FIXES++ ))
+        else
+            echo -e "  ${RED}✘  sshd konnte nicht gestartet werden${NC}"
+            (( ERRORS++ ))
+        fi
+    fi
+    if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+        echo -e "  ${GREEN}✔  Port 22 lauscht (intern)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠  Port 22 nicht gefunden — SSH antwortet möglicherweise nicht${NC}"
+    fi
+    local LAN_IP; LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    echo -e "  ${YELLOW}⚠  Fritzbox-Portfreigabe manuell prüfen:${NC}"
+    echo -e "  ${DIM}→ Fritzbox → Heimnetz → Netzwerk → ${LAN_IP} → IPv6-Portfreigabe${NC}"
+    echo -e "  ${DIM}→ TCP 22 (SSH) + UDP 51820 (WireGuard) müssen eingetragen sein${NC}"
+    echo ""
+
+    # ─ Schritt 13: DNS TTL ───────────────────────────────────────────────────
+    echo -e "${CYAN}[13/$TOTAL] DNS TTL ($VPN_HOST):${NC}"
+    if ! command -v dig &>/dev/null; then
+        echo -e "  ${YELLOW}⚠  dig nicht installiert — übersprungen${NC}"
+        echo -e "  ${DIM}→ Option 9 im Diagnosemenü: Tools installieren${NC}"
+    else
+        local DNS_TTL
+        DNS_TTL=$(dig "$VPN_HOST" AAAA +noall +answer 2>/dev/null | awk '{print $2}' | head -1)
+        if [[ -z "$DNS_TTL" ]]; then
+            echo -e "  ${YELLOW}⚠  Kein AAAA-Record — TTL nicht prüfbar${NC}"
+        elif [[ "$DNS_TTL" -le 60 ]]; then
+            echo -e "  ${GREEN}✔  TTL: ${DNS_TTL}s — gut, schnelle Reaktion bei Präfixwechsel${NC}"
+        elif [[ "$DNS_TTL" -le 300 ]]; then
+            echo -e "  ${YELLOW}⚠  TTL: ${DNS_TTL}s — nach Präfixwechsel bis zu ${DNS_TTL}s nicht erreichbar${NC}"
+            echo -e "  ${DIM}→ Cloudflare / ddns-go WebUI: TTL auf 60s (\"Auto\") senken${NC}"
+        else
+            echo -e "  ${RED}✘  TTL: ${DNS_TTL}s — zu hoch! Bei IPv6-Präfixwechsel lange nicht erreichbar${NC}"
+            echo -e "  ${DIM}→ Cloudflare DNS-Record TTL auf 60s (\"Auto\") setzen${NC}"
+            (( ERRORS++ ))
+        fi
     fi
     echo ""
 
