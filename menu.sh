@@ -505,7 +505,7 @@ menu_diag_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
-            26 72 11 \
+            28 72 12 \
             "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
             "2" "  Alle Tests auf einmal" \
             "3" "  WireGuard Handshake prüfen" \
@@ -516,6 +516,7 @@ menu_diag_wt() {
             "8" "  tcpdump UDP 51820  (live, Ctrl+C zum Beenden)" \
             "9" "  Tools installieren  (tcpdump, dnsutils, nmap)" \
             "10" " 🌐  IPv6-Präfix aktualisieren  (nach Präfixwechsel)" \
+            "11" " 📌  IPv6-Suffix fixieren       (Dauerlösung)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -701,9 +702,150 @@ menu_diag_wt() {
                 prefix_fix
                 press_enter
                 ;;
+            11)
+                setup_ipv6_fixed_suffix
+                ;;
             0|"") return ;;
         esac
     done
+}
+
+# Dauerlösung: IPv6-Suffix via slaac hwaddr fixieren
+# Berechnet EUI-64-Suffix aus MAC → Suffix bleibt bei Präfixwechsel konstant
+setup_ipv6_fixed_suffix() {
+    # ─ Schritt 1: Erklärung ───────────────────────────────────────────────
+    whiptail --title "📌 IPv6-Suffix fixieren — Dauerlösung" \
+        --msgbox "
+Problem:
+  Bei jedem Präfixwechsel (Vodafone, täglich) bekommt dieser
+  Raspi eine neue IPv6-Adresse. Die Fritzbox-Portfreigaben
+  zeigen dann auf die alte Adresse → SSH und WireGuard nicht
+  mehr erreichbar.
+
+Lösung:
+  Der Suffix (hinterer Teil der IPv6) wird fest an die MAC-
+  Adresse gebunden (slaac hwaddr). Vodafone kann den Präfix
+  tauschen so oft er will — der Suffix bleibt für immer
+  gleich. Die Fritzbox-Portfreigabe muss nur einmalig
+  aktualisiert werden.
+
+Dieses Script:
+  1. Berechnet den festen Suffix aus der MAC-Adresse
+  2. Passt /etc/dhcpcd.conf an
+  3. Startet den Netzwerkdienst neu
+  4. Zeigt die genaue Fritzbox-Anleitung" \
+        24 68 3>&1 1>&2 2>&3 || return
+
+    # ─ Schritt 2: MAC + EUI-64-Suffix berechnen ──────────────────────────
+    local MAC
+    MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
+    if [[ -z "$MAC" ]]; then
+        whiptail --title "Fehler" --msgbox "
+  eth0 nicht gefunden.
+  Läuft der Raspi mit einem anderen Interface-Namen?
+  (ip link show)" 10 52
+        return 1
+    fi
+
+    # EUI-64: MAC-Bytes einlesen, Bit 7 von Byte 0 flippen, ff:fe einfügen
+    IFS=':' read -ra M <<< "$MAC"
+    local B0=$(( 16#${M[0]} ^ 2 ))
+    local SUFFIX
+    SUFFIX=$(printf "%02x%02x:%02xff:fe%02x:%02x%02x" \
+        "$B0" "$((16#${M[1]}))" \
+        "$((16#${M[2]}))" "$((16#${M[3]}))" \
+        "$((16#${M[4]}))" "$((16#${M[5]}))") 
+
+    # ─ Schritt 3: Schon konfiguriert? ────────────────────────────────────
+    local CURRENT_SLAAC
+    CURRENT_SLAAC=$(grep -E '^slaac ' /etc/dhcpcd.conf 2>/dev/null | head -1 | awk '{print $2}')
+    if [[ "$CURRENT_SLAAC" == "hwaddr" ]]; then
+        local CURRENT_IPV6
+        CURRENT_IPV6=$(ip -6 addr show eth0 scope global 2>/dev/null \
+            | awk '/inet6/{print $2}' | cut -d'/' -f1 | head -1)
+        whiptail --title "✔ Bereits eingerichtet" \
+            --msgbox "
+  slaac hwaddr ist bereits aktiv — alles korrekt.
+
+  Fester Suffix:  ::${SUFFIX}
+  Aktuelle IPv6:  ${CURRENT_IPV6:-nicht ermittelbar}
+
+  Die Fritzbox-Portfreigaben müssen auf diese IPv6
+  zeigen. Bei jedem Präfixwechsel bleibt ::${SUFFIX}
+  gleich — Portfreigaben bleiben dauerhaft gültig." \
+            16 64
+        return 0
+    fi
+
+    # ─ Schritt 4: Bestätigung ─────────────────────────────────────────────
+    local LAN_IP; LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    whiptail --title "Bestätigung" --yesno "
+Aktuell:  slaac ${CURRENT_SLAAC:-private}  (zufälliger Suffix)
+Neu:      slaac hwaddr         (fester Suffix, MAC-basiert)
+
+MAC-Adresse:  $MAC
+Neuer Suffix: ::$SUFFIX
+
+Beispiel nach nächstem Präfixwechsel:
+  <neuer-präfix>::$SUFFIX
+  → Fritzbox-Portfreigabe bleibt trotzdem gültig!
+
+⚠  Der Netzwerkdienst wird kurz neu gestartet.
+   IPv4 ($LAN_IP) bleibt stabil.
+   IPv6 ist für ~5 Sekunden nicht erreichbar.
+
+Jetzt einrichten?" \
+        22 68 3>&1 1>&2 2>&3 || return
+
+    # ─ Schritt 5: dhcpcd.conf sichern + anpassen ─────────────────────────
+    clear
+    echo -e "${BOLD}IPv6-Suffix wird fixiert…${NC}\n"
+    local CONF="/etc/dhcpcd.conf"
+    local BACKUP="${CONF}.bak.$(date +%Y%m%d_%H%M%S)"
+    cp "$CONF" "$BACKUP"
+    echo -e "  ${DIM}Backup: $BACKUP${NC}"
+
+    if grep -qE '^slaac ' "$CONF"; then
+        sed -i 's/^slaac .*/slaac hwaddr/' "$CONF"
+    else
+        echo "slaac hwaddr" >> "$CONF"
+    fi
+    echo -e "  ${GREEN}✔  dhcpcd.conf aktualisiert${NC}"
+
+    # ─ Schritt 6: Netzwerkdienst neu starten ─────────────────────────────
+    echo -e "  Netzwerkdienst wird neu gestartet…"
+    systemctl restart dhcpcd 2>/dev/null || systemctl restart networking 2>/dev/null
+    sleep 6
+
+    local NEW_IPV6
+    NEW_IPV6=$(ip -6 addr show eth0 scope global 2>/dev/null \
+        | awk '/inet6/{print $2}' | cut -d'/' -f1 | head -1)
+    echo -e "  ${GREEN}✔  Neue IPv6: ${NEW_IPV6:-wird vergeben…}${NC}\n"
+    sleep 1
+
+    # ─ Schritt 7: Fritzbox-Anleitung ─────────────────────────────────────
+    whiptail --title "✔ Fertig — Fritzbox jetzt aktualisieren!" \
+        --msgbox "
+Der feste Suffix ist aktiv:
+  ::${SUFFIX}
+
+Aktuelle IPv6: ${NEW_IPV6:-<präfix>::${SUFFIX}}
+
+━━━ Fritzbox — Portfreigaben aktualisieren ━━━━━━━━━
+
+  1. Browser öffnen: http://fritz.box
+  2. Heimnetz → Netzwerk
+  3. Raspi (${LAN_IP}) → Bearbeiten
+  4. Tab: IPv6-Adressen → IPv6-Portfreigaben
+  5. ALLE alten Regeln löschen
+  6. Neu anlegen:
+       TCP Port 22    (SSH)        Ziel: aktuelle IPv6
+       UDP Port 51820 (WireGuard)  Ziel: aktuelle IPv6
+  7. Speichern
+
+Beim nächsten Präfixwechsel: Portfreigaben bleiben
+gültig — ::${SUFFIX} ändert sich nie mehr!" \
+        28 68
 }
 
 # =============================================================================
