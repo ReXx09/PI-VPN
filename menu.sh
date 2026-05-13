@@ -52,7 +52,10 @@ command -v whiptail &>/dev/null && HAS_WHIPTAIL=true
 press_enter() {
     echo ""
     echo -e "  ${DIM}[Enter] drücken um ins Menü zurückzukehren…${NC}"
-    read -r
+    read -r < /dev/tty
+    # Terminal-Zustand wiederherstellen (verhindert whiptail-Fehler nach
+    # Diagnose-Ausgaben, die den Terminalstatus verändern können)
+    stty sane 2>/dev/null || true
 }
 
 vpn_status() {
