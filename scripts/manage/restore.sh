@@ -88,7 +88,8 @@ for i in "${!FOUND_BACKUPS[@]}"; do
     F="${FOUND_BACKUPS[$i]}"
     SIZE=$(du -sh "$F" 2>/dev/null | cut -f1 || echo "?")
     DATE=$(basename "$F" | grep -oP '\d{8}_\d{6}' | sed 's/\(....\)\(..\)\(..\)_\(..\)\(..\)\(..\)/\3.\2.\1 \4:\5:\6/' || echo "")
-    echo -e "    ${BOLD}[$((i+1))]${NC}  $(basename "$F")  ${DIM}(${SIZE}, ${DATE})${NC}"
+    DIRNAME=$(dirname "$F")
+    echo -e "    ${BOLD}[$((i+1))]${NC}  $(basename "$F")  ${DIM}(${SIZE}, ${DATE}, ${DIRNAME})${NC}"
 done
 blank
 
