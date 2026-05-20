@@ -21,3 +21,8 @@ backups/
 # Betriebssystem
 .DS_Store
 Thumbs.db
+
+# Python Cache
+__pycache__/
+**/__pycache__/
+*.pyc

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Shell syntax check
+        run: |
+          bash -n menu.sh
+          bash -n scripts/manage/check.sh
+          bash -n scripts/manage/repair.sh
+          bash -n scripts/setup/setup-wizard.sh
+          bash -n scripts/setup/init.sh
+          bash -n scripts/setup/install-dashboard.sh
+
+      - name: Shell lint (shellcheck)
+        run: |
+          shellcheck menu.sh \
+            scripts/manage/check.sh \
+            scripts/manage/repair.sh \
+            scripts/setup/setup-wizard.sh \
+            scripts/setup/init.sh \
+            scripts/setup/install-dashboard.sh
+
+      - name: Python syntax check
+        run: |
+          python -m py_compile docker/nebenwohnsitz/dashboard/app.py
