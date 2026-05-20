@@ -534,27 +534,67 @@ menu_config_wt() {
                 press_enter
                 ;;
             6)
-                if whiptail --title "Systemupdate starten" --yesno \
-                    "Es werden jetzt Raspberry-Pi-Systemupdates installiert:\n\n  • apt update\n  • apt full-upgrade -y\n  • apt autoremove -y\n  • rpi-eeprom-update -a (falls verfügbar)\n\nJe nach Internet/SD/USB kann das einige Minuten dauern.\n\nJetzt starten?" \
-                    17 74; then
-                    clear
-                    echo -e "${BOLD}Raspberry Pi System aktualisieren…${NC}\n"
-                    apt update \
-                        && apt full-upgrade -y \
-                        && apt autoremove -y \
-                        && apt autoclean -y
+                local UPDATE_CHOICE
+                UPDATE_CHOICE=$(whiptail \
+                    --title "Raspberry Pi Systemupdate" \
+                    --menu "\nBitte Aktion wählen:" \
+                    15 70 4 \
+                    "1" "  Vorschau: verfügbare Pakete anzeigen" \
+                    "2" "  Jetzt vollständig aktualisieren" \
+                    "0" "  ← Zurück" \
+                    3>&1 1>&2 2>&3) || break
 
-                    if command -v rpi-eeprom-update &>/dev/null; then
-                        echo ""
-                        rpi-eeprom-update -a || true
-                    fi
+                case "$UPDATE_CHOICE" in
+                    1)
+                        clear
+                        echo -e "${BOLD}Update-Vorschau (apt) …${NC}\n"
+                        if apt update; then
+                            local UPGRADABLE
+                            UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep -v '^Listing' || true)
+                            local COUNT
+                            COUNT=$(echo "$UPGRADABLE" | sed '/^\s*$/d' | wc -l)
 
-                    if whiptail --title "Neustart empfohlen" --yesno \
-                        "Updates abgeschlossen.\n\nSoll der Raspberry Pi jetzt neu gestartet werden?" \
-                        10 64; then
-                        reboot
-                    fi
-                fi
+                            if [[ "$COUNT" -eq 0 ]]; then
+                                echo -e "${GREEN}✔  Keine aktualisierbaren Pakete gefunden.${NC}"
+                            else
+                                echo -e "${YELLOW}⚠  Aktualisierbare Pakete: ${COUNT}${NC}\n"
+                                echo "$UPGRADABLE" | head -40
+                                if [[ "$COUNT" -gt 40 ]]; then
+                                    echo ""
+                                    echo -e "${DIM}… weitere Pakete ausgelassen (zeige max. 40)${NC}"
+                                fi
+                            fi
+                        else
+                            echo -e "${RED}✘  apt update fehlgeschlagen.${NC}"
+                        fi
+                        press_enter
+                        ;;
+                    2)
+                        if whiptail --title "Systemupdate starten" --yesno \
+                            "Es werden jetzt Raspberry-Pi-Systemupdates installiert:\n\n  • apt update\n  • apt full-upgrade -y\n  • apt autoremove -y\n  • apt autoclean -y\n  • rpi-eeprom-update -a (falls verfügbar)\n\nJe nach Internet/SD/USB kann das einige Minuten dauern.\n\nJetzt starten?" \
+                            18 74; then
+                            clear
+                            echo -e "${BOLD}Raspberry Pi System aktualisieren…${NC}\n"
+                            apt update \
+                                && apt full-upgrade -y \
+                                && apt autoremove -y \
+                                && apt autoclean -y
+
+                            if command -v rpi-eeprom-update &>/dev/null; then
+                                echo ""
+                                rpi-eeprom-update -a || true
+                            fi
+
+                            if whiptail --title "Neustart empfohlen" --yesno \
+                                "Updates abgeschlossen.\n\nSoll der Raspberry Pi jetzt neu gestartet werden?" \
+                                10 64; then
+                                reboot
+                            fi
+                        fi
+                        ;;
+                    0|"")
+                        ;;
+                esac
                 ;;
             0|"") return ;;
         esac
