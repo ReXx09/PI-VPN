@@ -148,40 +148,50 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
     HTTP_MKCOL="000"
     HTTP_PUT="000"
     LAST_DAV_USER=""
+    LAST_ENDPOINT=""
     WEBDAV_BASE=""
     WEBDAV_URL=""
 
     for DAV_USER in "${DAV_CANDIDATES[@]}"; do
-        WEBDAV_BASE="${NC_URL%/}/remote.php/dav/files/${DAV_USER}${NC_PATH}"
-        WEBDAV_URL="${WEBDAV_BASE}/${BASENAME}"
-        LAST_DAV_USER="$DAV_USER"
+        for ENDPOINT in "dav" "webdav"; do
+            if [[ "$ENDPOINT" == "dav" ]]; then
+                WEBDAV_BASE="${NC_URL%/}/remote.php/dav/files/${DAV_USER}${NC_PATH}"
+            else
+                # Legacy-Endpunkt nutzt den authentifizierten User automatisch.
+                WEBDAV_BASE="${NC_URL%/}/remote.php/webdav${NC_PATH}"
+            fi
+            WEBDAV_URL="${WEBDAV_BASE}/${BASENAME}"
+            LAST_DAV_USER="$DAV_USER"
+            LAST_ENDPOINT="$ENDPOINT"
 
-        info "Ziel: ${WEBDAV_URL}"
+            info "Ziel: ${WEBDAV_URL}"
 
-        # Zielordner per MKCOL anlegen (405/409 = existiert bereits bzw. konflikt)
-        HTTP_MKCOL=$(curl -s -o /dev/null -w "%{http_code}" \
-            -u "${AUTH_USER}:${NC_PASS}" \
-            -X MKCOL \
-            "${WEBDAV_BASE}/" 2>/dev/null || true)
-        [[ "$HTTP_MKCOL" =~ ^(201|405|409|301|302)$ ]] || \
-            warn "MKCOL Ordner-Anlage: HTTP $HTTP_MKCOL (wird ignoriert — Upload trotzdem versucht)"
+            # Zielordner per MKCOL anlegen (405/409 = existiert bereits bzw. konflikt)
+            HTTP_MKCOL=$(curl -s -o /dev/null -w "%{http_code}" \
+                -u "${AUTH_USER}:${NC_PASS}" \
+                -X MKCOL \
+                "${WEBDAV_BASE}/" 2>/dev/null || true)
+            [[ "$HTTP_MKCOL" =~ ^(201|405|409|301|302)$ ]] || \
+                warn "MKCOL Ordner-Anlage: HTTP $HTTP_MKCOL (wird ignoriert — Upload trotzdem versucht)"
 
-        # Datei hochladen via HTTP PUT
-        HTTP_PUT=$(curl -s -o /dev/null -w "%{http_code}" \
-            -u "${AUTH_USER}:${NC_PASS}" \
-            -T "$EXPORT_FILE" \
-            --max-time 120 \
-            "${WEBDAV_URL}" 2>/dev/null || true)
+            # Datei hochladen via HTTP PUT
+            HTTP_PUT=$(curl -s -o /dev/null -w "%{http_code}" \
+                -u "${AUTH_USER}:${NC_PASS}" \
+                -T "$EXPORT_FILE" \
+                --max-time 120 \
+                "${WEBDAV_URL}" 2>/dev/null || true)
 
-        if [[ "$HTTP_PUT" =~ ^(200|201|204)$ ]]; then
-            UPLOAD_OK=1
-            break
-        fi
+            if [[ "$HTTP_PUT" =~ ^(200|201|204)$ ]]; then
+                UPLOAD_OK=1
+                break 2
+            fi
+        done
     done
 
     if [[ "$UPLOAD_OK" -eq 1 ]]; then
         ok "Nextcloud: Upload erfolgreich (HTTP $HTTP_PUT)"
         info "Nextcloud-Pfad: ${NC_PATH}/${BASENAME}"
+        info "Nextcloud-Endpunkt: /remote.php/${LAST_ENDPOINT}"
         if [[ -n "$NC_DAV_USER" && "$NC_DAV_USER" != "$LAST_DAV_USER" ]]; then
             warn "Hinweis: Genutzter DAV-User ist '$LAST_DAV_USER' statt NC_DAV_USER='$NC_DAV_USER'."
         elif [[ -z "$NC_DAV_USER" && "$LAST_DAV_USER" != "$NC_USER" ]]; then
@@ -217,7 +227,8 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
         if [[ "$HTTP_PUT" == "401" ]]; then
             warn "Auth-Fehler (401): Prüfe NC_USER (Login), NC_PASS (App-Passwort) und 2FA/App-Passwort."
         elif [[ "$HTTP_PUT" == "404" ]]; then
-            warn "Pfad-Fehler (404): Prüfe internen DAV-User. Optional in .env: NC_DAV_USER=<interne_uid>."
+            warn "Pfad-Fehler (404): DAV-User/Ordner nicht gefunden. Optional in .env: NC_DAV_USER=<interne_uid>."
+            warn "Tipp: Bei E-Mail-Login funktioniert oft /remote.php/webdav besser als /dav/files/<user>."
         else
             warn "Prüfe: NC_URL, NC_USER, NC_PASS in .env — App-Passwort verwenden!"
         fi
