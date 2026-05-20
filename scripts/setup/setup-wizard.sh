@@ -284,6 +284,11 @@ ok "IP-Forwarding aktiv"
 if $UPDATE_MODE; then
     blank
     echo -e "  ${GREEN}→${NC}  Update-Modus: Schritte 3–6 übersprungen — bestehende .env wird verwendet."
+    if [[ -f "$ENV_FILE" ]]; then
+        ENV_UPDATE_BKFILE="${ENV_FILE}.bak.update.$(date +%Y%m%d_%H%M%S)"
+        cp "$ENV_FILE" "$ENV_UPDATE_BKFILE"
+        ok "Backup der .env erstellt: $ENV_UPDATE_BKFILE"
+    fi
     blank
     # Variablen für Abschluss-Ausgabe aus bestehender .env laden
     WGUI_USERNAME=$(grep   '^WGUI_USERNAME='                    "$ENV_FILE" | cut -d= -f2- || echo "admin")
