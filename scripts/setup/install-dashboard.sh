@@ -79,7 +79,7 @@ if [[ -f "$ENV_FILE" ]]; then
         warn "Setzen: VPN_HOST=vpn.deine-domain.de in $ENV_FILE"
     elif [[ "${VPN_HOST}" == "vpn.deine-domain.de" ]]; then
         warn "VPN_HOST ist noch Platzhalter (${VPN_HOST})."
-        warn "Bitte auf deine echte Domain setzen (z.B. vpn.rexxlab.uk)."
+        warn "Bitte auf deine echte Domain setzen (z.B. vpn.example.com)."
     fi
 else
     warn ".env nicht gefunden — Dashboard startet ohne VPN_HOST (DDNS-Abgleich deaktiviert)"

@@ -59,7 +59,7 @@ if [[ -f "$ENV_FILE" ]]; then
         warn "Bitte setzen: VPN_HOST=vpn.deine-domain.de"
     elif [[ "$VPN_HOST_VALUE" == "vpn.deine-domain.de" ]]; then
         warn "VPN_HOST ist noch Platzhalter ($VPN_HOST_VALUE)."
-        warn "Bitte auf deine echte Domain ändern, z.B. VPN_HOST=vpn.rexxlab.uk"
+        warn "Bitte auf deine echte Domain ändern, z.B. VPN_HOST=vpn.example.com"
     else
         info "VPN_HOST erkannt: $VPN_HOST_VALUE"
     fi

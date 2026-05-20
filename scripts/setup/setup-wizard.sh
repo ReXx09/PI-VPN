@@ -300,7 +300,7 @@ if $UPDATE_MODE; then
     if [[ -z "$VPN_HOST" || "$VPN_HOST" == "vpn.deine-domain.de" ]]; then
         blank
         warn "VPN_HOST fehlt oder ist Platzhalter in der bestehenden .env"
-        ask "DDNS-Hostname (FQDN) für Dashboard/Diagnose:" "vpn.rexxlab.uk" VPN_HOST
+        ask "DDNS-Hostname (FQDN) für Dashboard/Diagnose:" "vpn.deine-domain.de" VPN_HOST
         [[ -z "$VPN_HOST" ]] && VPN_HOST="vpn.deine-domain.de"
 
         if grep -q '^VPN_HOST=' "$ENV_FILE"; then
