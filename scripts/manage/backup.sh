@@ -72,10 +72,10 @@ tar -czf "$BACKUP_FILE" \
 BACKUP_SIZE=$(du -sh "$BACKUP_FILE" | cut -f1)
 info "Backup erstellt: $BACKUP_FILE ($BACKUP_SIZE)"
 
-# ─── Alte Backups aufräumen (behalte die letzten 10) ─────────────────────────
-info "Bereinige alte Backups (behalte letzte 10)..."
+# ─── Alte Backups aufräumen (behalte die letzten 5) ─────────────────────────
+info "Bereinige alte Backups (behalte letzte 5)..."
 ls -t "$BACKUP_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null \
-    | tail -n +11 \
+    | tail -n +6 \
     | xargs -r rm --
 
 BACKUP_COUNT=$(ls "$BACKUP_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null | wc -l)
@@ -93,9 +93,9 @@ cp "$BACKUP_FILE" "$EXPORT_FILE"
 chmod 640 "$EXPORT_FILE"
 chown "${EXPORT_USER}:${EXPORT_USER}" "$EXPORT_FILE" 2>/dev/null || true
 
-# Alte Exporte aufräumen (behalte letzte 10)
+# Alte Exporte aufräumen (behalte letzte 5)
 ls -t "$EXPORT_DIR"/pi-vpn-backup_*.tar.gz 2>/dev/null \
-    | tail -n +11 \
+    | tail -n +6 \
     | xargs -r rm --
 
 echo ""
@@ -198,8 +198,8 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
             warn "Hinweis: Für stabile Uploads optional in .env setzen: NC_DAV_USER=$LAST_DAV_USER"
         fi
 
-        # Alte Backups auf Nextcloud aufräumen (behalte letzte 10)
-        info "Nextcloud: Bereinige alte Backups (behalte letzte 10)…"
+        # Alte Backups auf Nextcloud aufräumen (behalte letzte 5)
+        info "Nextcloud: Bereinige alte Backups (behalte letzte 5)…"
         REMOTE_LIST=$(curl -s \
             -u "${AUTH_USER}:${NC_PASS}" \
             -X PROPFIND \
@@ -211,7 +211,7 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
         COUNT=0
         while IFS= read -r REMOTE_FILE; do
             (( ++COUNT ))
-            if [[ $COUNT -gt 10 ]]; then
+            if [[ $COUNT -gt 5 ]]; then
                 DEL_URL="${NC_URL%/}${REMOTE_FILE}"
                 HTTP_DEL=$(curl -s -o /dev/null -w "%{http_code}" \
                     -u "${AUTH_USER}:${NC_PASS}" \
