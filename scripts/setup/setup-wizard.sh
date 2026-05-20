@@ -290,6 +290,22 @@ if $UPDATE_MODE; then
     WGUI_SERVER_ADDR=$(grep '^WGUI_SERVER_INTERFACE_ADDRESSES=' "$ENV_FILE" | cut -d= -f2- || echo "10.10.0.1/24")
     WGUI_MTU=$(grep         '^WGUI_MTU='                        "$ENV_FILE" | cut -d= -f2- || echo "1280")
     WGUI_DNS=$(grep         '^WGUI_DNS='                        "$ENV_FILE" | cut -d= -f2- || echo "1.1.1.1")
+    VPN_HOST=$(grep         '^VPN_HOST='                        "$ENV_FILE" | cut -d= -f2- || echo "vpn.deine-domain.de")
+
+    if [[ -z "$VPN_HOST" || "$VPN_HOST" == "vpn.deine-domain.de" ]]; then
+        blank
+        warn "VPN_HOST fehlt oder ist Platzhalter in der bestehenden .env"
+        ask "DDNS-Hostname (FQDN) für Dashboard/Diagnose:" "vpn.rexxlab.uk" VPN_HOST
+        [[ -z "$VPN_HOST" ]] && VPN_HOST="vpn.deine-domain.de"
+
+        if grep -q '^VPN_HOST=' "$ENV_FILE"; then
+            sed -i "s|^VPN_HOST=.*|VPN_HOST=${VPN_HOST}|" "$ENV_FILE"
+        else
+            echo "VPN_HOST=${VPN_HOST}" >> "$ENV_FILE"
+        fi
+        ok "VPN_HOST in .env gesetzt: $VPN_HOST"
+    fi
+
     WGUI_PASSWORD="(unverändert)"
     SETUP_DDNS=true
 else
@@ -415,6 +431,14 @@ info "http://${RASPI_IP}:9876"
 echo -e "  ${DIM}Unterstützte Provider: Cloudflare, DeSEC, Duck DNS, AliDNS, ...${NC}"
 echo -e "  ${DIM}Vollständige Liste: https://github.com/jeessy2/ddns-go${NC}"
 
+blank
+echo -e "  ${BOLD}DDNS-Hostname für Dashboard/Diagnose${NC}"
+echo -e "  ${DIM}Dieser Wert wird als VPN_HOST in .env gespeichert und für AAAA-Checks verwendet.${NC}"
+echo ""
+ask "DDNS-Hostname (FQDN):" "vpn.deine-domain.de" VPN_HOST
+[[ -z "$VPN_HOST" ]] && VPN_HOST="vpn.deine-domain.de"
+ok "VPN_HOST: $VPN_HOST"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SCHRITT 6 — ZUSAMMENFASSUNG & .ENV ERSTELLEN
@@ -429,6 +453,10 @@ echo -e "  Passwort          : ${BOLD}$(echo "$WGUI_PASSWORD" | sed 's/./*/g')${
 echo -e "  Session-Secret    : ${BOLD}$(echo "$SESSION_SECRET" | cut -c1-8)...${NC} (automatisch generiert)"
 echo -e "  Tunnel-IP (Raspi) : ${BOLD}${WGUI_SERVER_ADDR}${NC}"
 echo -e "  DNS               : ${BOLD}${WGUI_DNS}${NC}"
+echo -e "  VPN_HOST          : ${BOLD}${VPN_HOST}${NC}"
+if [[ "$VPN_HOST" == "vpn.deine-domain.de" ]]; then
+    echo -e "  ${YELLOW}⚠  VPN_HOST ist noch Platzhalter — Dashboard-DNS-Check bleibt sonst unbrauchbar.${NC}"
+fi
 echo -e "  MTU               : ${BOLD}${WGUI_MTU}${NC}"
 echo -e "  LAN-Subnetz       : ${BOLD}${LAN_SUBNET}${NC}"
 echo -e "  LAN-Interface     : ${BOLD}${LAN_IFACE}${NC}"
@@ -473,6 +501,7 @@ WGUI_POST_UP=${POSTUP}
 WGUI_POST_DOWN=${POSTDOWN}
 LAN_SUBNET=${LAN_SUBNET}
 LAN_IFACE=${LAN_IFACE}
+VPN_HOST=${VPN_HOST}
 ENVFILE
 
 chmod 600 "$ENV_FILE"

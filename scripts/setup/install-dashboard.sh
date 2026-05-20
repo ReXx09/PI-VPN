@@ -74,6 +74,13 @@ if [[ -f "$ENV_FILE" ]]; then
     # shellcheck source=/dev/null
     set -a; source "$ENV_FILE"; set +a
     ok ".env geladen (VPN_HOST=${VPN_HOST:-<nicht gesetzt>})"
+    if [[ -z "${VPN_HOST:-}" ]]; then
+        warn "VPN_HOST fehlt — Dashboard zeigt DNS AAAA als 'Unbekannt'."
+        warn "Setzen: VPN_HOST=vpn.deine-domain.de in $ENV_FILE"
+    elif [[ "${VPN_HOST}" == "vpn.deine-domain.de" ]]; then
+        warn "VPN_HOST ist noch Platzhalter (${VPN_HOST})."
+        warn "Bitte auf deine echte Domain setzen (z.B. vpn.rexxlab.uk)."
+    fi
 else
     warn ".env nicht gefunden — Dashboard startet ohne VPN_HOST (DDNS-Abgleich deaktiviert)"
 fi
