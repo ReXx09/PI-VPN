@@ -231,6 +231,8 @@ if ! command -v dig &>/dev/null; then
 else
     DNS_AAAA=$(dig "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1 || true)
     DNS_TTL=$(dig  "$VPN_HOST" AAAA +noall +answer +time=3 2>/dev/null | awk 'NR==1{print $2}' || true)
+    DNS_CF=$(dig "@1.1.1.1" "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1 || true)
+    DNS_GG=$(dig "@8.8.8.8" "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1 || true)
 
     if [[ -n "$DNS_AAAA" ]]; then
         ok "AAAA-Record: $DNS_AAAA"
@@ -256,7 +258,6 @@ else
         fi
 
         # Konsistenzcheck: lokaler Resolver vs. 1.1.1.1
-        DNS_CF=$(dig "@1.1.1.1" "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1 || true)
         if [[ -n "$DNS_CF" && "$DNS_CF" != "$DNS_AAAA" ]]; then
             warn "DNS-Divergenz: lokaler Resolver ($DNS_AAAA) ≠ 1.1.1.1 ($DNS_CF)"
             hint "DNS-Cache des Routers noch nicht abgelaufen?"
@@ -270,9 +271,16 @@ else
             [[ -n "$RDNS" ]] && ok "Reverse-DNS: $RDNS" || warn "Reverse-DNS: kein PTR-Record"
         fi
     else
-        fail "AAAA-Record: nicht auflösbar für $VPN_HOST"
-        hint "ddns-go läuft? Domain korrekt? Cloudflare API-Key gültig?"
-        hint "WebUI: http://${LAN_IP}:9876"
+        if [[ -n "$DNS_CF" || -n "$DNS_GG" ]]; then
+            warn "AAAA lokal nicht auflösbar, aber extern vorhanden (Resolver/Cache-Problem)"
+            [[ -n "$DNS_CF" ]] && hint "Cloudflare (1.1.1.1): $DNS_CF"
+            [[ -n "$DNS_GG" ]] && hint "Google (8.8.8.8): $DNS_GG"
+            hint "Fritzbox/Router-DNS-Cache abwarten oder Resolver auf 1.1.1.1/8.8.8.8 testen"
+        else
+            fail "AAAA-Record: nicht auflösbar für $VPN_HOST"
+            hint "ddns-go läuft? Domain korrekt? Cloudflare API-Key gültig?"
+            hint "WebUI: http://${LAN_IP}:9876"
+        fi
     fi
 
     # A-Record (bei DS-Lite sollte keiner gesetzt sein)
