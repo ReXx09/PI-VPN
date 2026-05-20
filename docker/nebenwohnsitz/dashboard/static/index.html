@@ -441,9 +441,22 @@
 
       // ── DDNS ──
       const dn = d.ddns || {};
-      set('ddns-host', dn.hostname || '—');
+      if (dn.hostname) set('ddns-host', dn.hostname);
+      else set('ddns-host', '<span class="c-orange">VPN_HOST nicht gesetzt</span>');
       set('ddns-lip6', dn.local_ipv6 || '<span class="c-red">Keine IPv6</span>');
-      set('ddns-dip6', dn.dns_ipv6  || '<span class="c-muted">—</span>');
+      if (dn.dns_ipv6) {
+        set('ddns-dip6', dn.dns_ipv6);
+      } else if (dn.dns_reason === 'hostname_missing') {
+        set('ddns-dip6', '<span class="c-orange">Hostname fehlt (VPN_HOST)</span>');
+      } else if (dn.dns_reason === 'no_aaaa') {
+        set('ddns-dip6', '<span class="c-yellow">Kein AAAA-Record gefunden</span>');
+      } else if (dn.dns_reason === 'dig_missing') {
+        set('ddns-dip6', '<span class="c-red">dig fehlt im Container</span>');
+      } else if (dn.dns_reason === 'lookup_failed') {
+        set('ddns-dip6', '<span class="c-red">DNS-Lookup fehlgeschlagen</span>');
+      } else {
+        set('ddns-dip6', '<span class="c-muted">—</span>');
+      }
       const mb = el('ddns-match');
       if (dn.match === true)  { mb.className='match-pill match-ok';   mb.innerHTML='✔ DNS aktuell'; }
       else if (dn.match===false){ mb.className='match-pill match-fail'; mb.innerHTML='✘ DNS veraltet!'; }

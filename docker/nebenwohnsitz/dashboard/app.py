@@ -4,6 +4,7 @@
 import os
 import subprocess
 import time
+import shutil
 from flask import Flask, jsonify, send_from_directory
 
 try:
@@ -189,13 +190,29 @@ def local_ipv6():
 
 
 def dns_aaaa(hostname):
-    """AAAA-Record per dig auflösen."""
+    """AAAA-Record per dig auflösen, inkl. Fehlergrund."""
     if not hostname:
-        return None
-    out = sh(["dig", hostname, "AAAA", "+short", "+time=3"])
+        return None, "hostname_missing"
+    if not shutil.which("dig"):
+        return None, "dig_missing"
+
+    try:
+        proc = subprocess.run(
+            ["dig", hostname, "AAAA", "+short", "+time=3"],
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return None, "lookup_failed"
+
+    out = proc.stdout or ""
     lines = [l.strip() for l in out.strip().split("\n")
              if l.strip() and not l.startswith(";")]
-    return lines[0] if lines else None
+    if lines:
+        return lines[0], None
+    return None, "no_aaaa"
 
 
 # ── Daten-Collector: Nextcloud ────────────────────────────────────────────────
@@ -269,7 +286,7 @@ def status():
     wg_up, peers = wg_data()
     lip6     = local_ipv6()
     hostname = os.environ.get("VPN_HOST", "")
-    dip6     = dns_aaaa(hostname)
+    dip6, dns_reason = dns_aaaa(hostname)
 
     return jsonify({
         "timestamp": int(time.time()),
@@ -286,6 +303,7 @@ def status():
             "hostname":   hostname,
             "local_ipv6": lip6,
             "dns_ipv6":   dip6,
+            "dns_reason": dns_reason,
             "match":      (lip6 == dip6) if (lip6 and dip6) else None,
         },
         "system": system_info(),

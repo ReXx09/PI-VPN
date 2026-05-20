@@ -245,15 +245,83 @@ else
 fi
 
 # =============================================================================
-# 7. SLAAC-MODUS (nicht automatisch änderbar — verweist auf Wizard)
+# 7. IPv6-Suffix stabilisieren (NetworkManager oder dhcpcd)
 # =============================================================================
-sect "IPv6-Suffix (slaac)"
+sect "IPv6-Suffix stabilisieren"
 
-SLAAC=$(grep -E '^slaac ' /etc/dhcpcd.conf 2>/dev/null | awk '{print $2}' | head -1 || true)
-if [[ "$SLAAC" == "hwaddr" ]]; then
-    skip "slaac hwaddr — Suffix fest, kein Handlungsbedarf"
+NM_ACTIVE=$(systemctl is-active NetworkManager 2>/dev/null || echo "inactive")
+DHCPCD_ACTIVE=$(systemctl is-active dhcpcd 2>/dev/null || echo "inactive")
+
+MAC=$(tr '[:upper:]' '[:lower:]' < /sys/class/net/eth0/address 2>/dev/null || true)
+EXPECT_SUFFIX=""
+if [[ -n "$MAC" ]]; then
+    IFS=':' read -r M0 M1 M2 M3 M4 M5 <<< "$MAC"
+    if [[ -n "$M0" && -n "$M5" ]]; then
+        B0=$(printf '%02x' $((16#$M0 ^ 2)))
+        EXPECT_SUFFIX="${B0}${M1}:${M2}ff:fe${M3}:${M4}${M5}"
+    fi
+fi
+
+if [[ "$NM_ACTIVE" == "active" ]]; then
+    if command -v nmcli &>/dev/null; then
+        CONN_UUID=$(nmcli -t -f GENERAL.CONNECTION device show eth0 2>/dev/null | cut -d: -f2-)
+        if [[ -z "$CONN_UUID" || "$CONN_UUID" == "--" ]]; then
+            CONN_UUID=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | awk -F: '$2=="eth0"{print $1; exit}')
+        fi
+
+        if [[ -n "$CONN_UUID" ]]; then
+            problem "NetworkManager erkannt — setze IPv6 auf EUI-64 (stabiler Suffix)…"
+            if nmcli connection modify "$CONN_UUID" ipv6.method auto ipv6.addr-gen-mode eui64 ipv6.ip6-privacy 0 2>/dev/null; then
+                nmcli device reapply eth0 2>/dev/null || nmcli connection up "$CONN_UUID" 2>/dev/null || true
+                fixed "NetworkManager-Profil angepasst: ipv6.addr-gen-mode=eui64, privacy=0"
+            else
+                MANUAL_ACTIONS+=("NetworkManager-Profil konnte nicht angepasst werden: nmcli connection show '$CONN_UUID'")
+            fi
+        else
+            MANUAL_ACTIONS+=("Kein aktives NM-Profil für eth0 gefunden — nmcli connection show --active prüfen")
+        fi
+    else
+        MANUAL_ACTIONS+=("NetworkManager aktiv, aber nmcli fehlt — Paket network-manager installieren")
+    fi
+
+elif [[ "$DHCPCD_ACTIVE" == "active" || -f /etc/dhcpcd.conf ]]; then
+    SLAAC=$(grep -E '^slaac ' /etc/dhcpcd.conf 2>/dev/null | awk '{print $2}' | head -1 || true)
+    if [[ "$SLAAC" == "hwaddr" ]]; then
+        skip "dhcpcd: slaac hwaddr bereits gesetzt"
+    else
+        if grep -qE '^slaac ' /etc/dhcpcd.conf 2>/dev/null; then
+            sed -i 's/^slaac .*/slaac hwaddr/' /etc/dhcpcd.conf
+        else
+            echo "slaac hwaddr" >> /etc/dhcpcd.conf
+        fi
+        systemctl restart dhcpcd 2>/dev/null || systemctl restart networking 2>/dev/null || true
+        fixed "dhcpcd: slaac hwaddr gesetzt"
+    fi
 else
-    manual "slaac ${SLAAC:-private}: Suffix wechselt bei Präfixwechsel → Diagnosemenü Option 11 ausführen!"
+    manual "Kein unterstützter Netzwerkmanager erkannt (weder NetworkManager noch dhcpcd)"
+fi
+
+# Laufzeit-Modus auf EUI-64 erzwingen (wirksam bis zum nächsten Link-Reset)
+ADDR_ETH0=$(sysctl -n net.ipv6.conf.eth0.addr_gen_mode 2>/dev/null || echo "?")
+if [[ "$ADDR_ETH0" != "0" ]]; then
+    sysctl -w net.ipv6.conf.eth0.addr_gen_mode=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.default.addr_gen_mode=0 >/dev/null 2>&1 || true
+    sysctl -w net.ipv6.conf.all.addr_gen_mode=0 >/dev/null 2>&1 || true
+    fixed "addr_gen_mode auf EUI-64 gesetzt (eth0/default/all)"
+else
+    skip "addr_gen_mode eth0 bereits EUI-64"
+fi
+
+if [[ -n "$EXPECT_SUFFIX" ]]; then
+    ip -6 addr flush dev eth0 scope global 2>/dev/null || true
+    sleep 3
+    CUR_IPV6=$(ip -6 addr show dev eth0 scope global 2>/dev/null | awk '/inet6/{print $2}' | cut -d'/' -f1 | head -1)
+    if [[ -n "$CUR_IPV6" && "${CUR_IPV6,,}" == *":${EXPECT_SUFFIX}" ]]; then
+        fixed "IPv6-Suffix jetzt stabil (::$EXPECT_SUFFIX)"
+    else
+        manual "IPv6-Suffix noch nicht stabil erkannt — aktuell: ${CUR_IPV6:-unbekannt}, erwartet: ::$EXPECT_SUFFIX"
+        manual "Falls Fritzbox alte IPv6 zeigt: Portfreigaben auf aktuelle IPv6 neu setzen"
+    fi
 fi
 
 # =============================================================================

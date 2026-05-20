@@ -131,6 +131,85 @@ vpn_peer_ip() {
     wg show wg0 allowed-ips 2>/dev/null | awk '{print $2}' | cut -d'/' -f1 | grep -v '^$' | head -1
 }
 
+wg_peer_stats() {
+    # Ausgabeformat: recent stale never (Schwelle: 5 Minuten)
+    local NOW RECENT STALE NEVER TS
+    NOW=$(date +%s)
+    RECENT=0; STALE=0; NEVER=0
+    while read -r TS; do
+        [[ -z "$TS" ]] && continue
+        if [[ "$TS" == "0" ]]; then
+            NEVER=$((NEVER + 1))
+        else
+            local AGO=$((NOW - TS))
+            if [[ $AGO -lt 300 ]]; then
+                RECENT=$((RECENT + 1))
+            else
+                STALE=$((STALE + 1))
+            fi
+        fi
+    done < <(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
+    echo "$RECENT $STALE $NEVER"
+}
+
+opnsense_s2s_diag() {
+    echo -e "${BOLD}═══ OPNsense Site-to-Site Diagnose ═══${NC}\n"
+
+    if ! ip link show wg0 &>/dev/null; then
+        echo -e "  ${RED}✘${NC}  wg0 nicht aktiv."
+        echo -e "  ${DIM}→ Erst wireguard-ui starten/neustarten.${NC}"
+        return 1
+    fi
+
+    local RECENT STALE NEVER
+    read -r RECENT STALE NEVER < <(wg_peer_stats)
+    echo -e "  ${CYAN}Peer-Zustand:${NC} recent=${RECENT}  stale=${STALE}  never=${NEVER}"
+
+    if [[ $RECENT -ge 1 && $((STALE + NEVER)) -ge 1 ]]; then
+        echo -e "  ${YELLOW}⚠${NC}  Gemischter Zustand erkannt: mindestens ein Peer aktiv, ein anderer nicht."
+        echo -e "  ${DIM}   Typischer Fall: Handy funktioniert, OPNsense Site-to-Site nicht.${NC}"
+    elif [[ $RECENT -eq 0 && $((STALE + NEVER)) -ge 1 ]]; then
+        echo -e "  ${RED}✘${NC}  Kein aktiver Peer-Handshake."
+    else
+        echo -e "  ${GREEN}✔${NC}  Handshake-Lage unauffällig."
+    fi
+
+    echo ""
+    echo -e "${CYAN}[1/4] Endpoint-/Handshake-Übersicht:${NC}"
+    wg show wg0 2>/dev/null
+
+    echo ""
+    echo -e "${CYAN}[2/4] DNS-Check (${VPN_HOST}):${NC}"
+    if command -v dig &>/dev/null; then
+        local AAAA
+        AAAA=$(dig "$VPN_HOST" AAAA +short 2>/dev/null | head -1)
+        if [[ -n "$AAAA" ]]; then
+            echo -e "  AAAA: ${GREEN}${AAAA}${NC}"
+        else
+            echo -e "  AAAA: ${RED}(nicht auflösbar)${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠${NC}  dig nicht installiert (Option 9)."
+    fi
+
+    echo ""
+    echo -e "${CYAN}[3/4] OPNsense ToDo (wenn Handy geht, S2S nicht):${NC}"
+    echo -e "  ${DIM}• OPNsense Endpoint-Host: ${VPN_HOST}:${NC}51820"
+    echo -e "  ${DIM}• OPNsense DNS muss aktuelle AAAA sehen (kein alter Cache)${NC}"
+    echo -e "  ${DIM}• Peer Public Key / PSK prüfen${NC}"
+    echo -e "  ${DIM}• Persistent Keepalive: 25${NC}"
+    echo -e "  ${DIM}• Tunnel Instance einmal Disable/Enable + States leeren${NC}"
+
+    echo ""
+    echo -e "${CYAN}[4/4] Live-Pakete prüfen:${NC}"
+    if command -v tcpdump &>/dev/null; then
+        echo -e "  ${DIM}Starte jetzt OPNsense-Tunnel neu. Lausche 20s auf UDP 51820…${NC}\n"
+        timeout 20 tcpdump -i eth0 udp port 51820 -n 2>/dev/null || true
+    else
+        echo -e "  ${YELLOW}⚠${NC}  tcpdump nicht installiert (Option 9)."
+    fi
+}
+
 # =============================================================================
 # WHIPTAIL — Grafisches TUI-Menü
 # =============================================================================
@@ -505,7 +584,7 @@ menu_diag_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
             --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
-            30 72 14 \
+            32 76 15 \
             "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
             "2" "  Alle Tests auf einmal" \
             "3" "  WireGuard Handshake prüfen" \
@@ -519,6 +598,7 @@ menu_diag_wt() {
             "11" " 📌  IPv6-Suffix fixieren       (Dauerlösung)" \
             "12" " 📋  Vollständiger Diagnose-Report  (check.sh)" \
             "13" " 🔨  Automatische Reparatur         (repair.sh)" \
+            "14" " 🧭  OPNsense Site-to-Site Diagnose" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -715,6 +795,11 @@ menu_diag_wt() {
             13)
                 clear
                 bash "$MANAGE_DIR/repair.sh"
+                press_enter
+                ;;
+            14)
+                clear
+                opnsense_s2s_diag
                 press_enter
                 ;;
             0|"") return ;;
@@ -961,7 +1046,7 @@ prefix_fix() {
 ipv6_autofix() {
     local FIXES=0
     local ERRORS=0
-    local TOTAL=13
+    local TOTAL=14
 
     echo -e "${BOLD}═══ System-Autofix & Diagnose ═══${NC}\n"
 
@@ -1138,19 +1223,23 @@ ipv6_autofix() {
     # ─ Schritt 9: wg0 Interface & Handshake ─────────────────────────────────
     echo -e "${CYAN}[9/$TOTAL] WireGuard Interface (wg0):${NC}"
     if ip link show wg0 &>/dev/null; then
-        local HS
-        HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}')
-        if [[ -n "$HS" && "$HS" != "0" ]]; then
-            local AGO=$(( $(date +%s) - HS ))
-            if [[ $AGO -lt 300 ]]; then
-                echo -e "  ${GREEN}✔  UP — Handshake vor ${AGO}s${NC}"
-            else
-                echo -e "  ${YELLOW}⚠  UP — letzter Handshake vor ${AGO}s (>5 Min)${NC}"
-                echo -e "  ${DIM}→ OPNsense-Tunnel prüfen oder neu starten${NC}"
-            fi
-        else
-            echo -e "  ${YELLOW}⚠  UP aber noch kein Handshake${NC}"
-            echo -e "  ${DIM}→ Warte auf OPNsense, oder Tunnel auf OPNsense-Seite neu starten${NC}"
+        local RECENT STALE NEVER
+        read -r RECENT STALE NEVER < <(wg_peer_stats)
+        if [[ $RECENT -ge 1 ]]; then
+            echo -e "  ${GREEN}✔  UP — aktive Handshakes: ${RECENT}${NC}"
+        fi
+        if [[ $STALE -ge 1 ]]; then
+            echo -e "  ${YELLOW}⚠  Stale Handshakes (>5 Min): ${STALE}${NC}"
+        fi
+        if [[ $NEVER -ge 1 ]]; then
+            echo -e "  ${YELLOW}⚠  Ohne Handshake (0): ${NEVER}${NC}"
+        fi
+        if [[ $RECENT -eq 0 && $((STALE + NEVER)) -ge 1 ]]; then
+            echo -e "  ${RED}✘  Kein aktiver Tunnel${NC}"
+            echo -e "  ${DIM}→ OPNsense Tunnel starten / Endpoint / Keys prüfen${NC}"
+        elif [[ $RECENT -ge 1 && $((STALE + NEVER)) -ge 1 ]]; then
+            echo -e "  ${YELLOW}⚠  Gemischter Zustand: Peer aktiv, anderer Peer inaktiv${NC}"
+            echo -e "  ${DIM}→ Typischer Fall: Handy geht, OPNsense Site-to-Site nicht${NC}"
         fi
     else
         echo -e "  ${RED}✘  wg0 nicht aktiv — starte wireguard-ui neu…${NC}"
@@ -1259,6 +1348,48 @@ ipv6_autofix() {
             echo -e "  ${RED}✘  TTL: ${DNS_TTL}s — zu hoch! Bei IPv6-Präfixwechsel lange nicht erreichbar${NC}"
             echo -e "  ${DIM}→ Cloudflare DNS-Record TTL auf 60s (\"Auto\") setzen${NC}"
             (( ERRORS++ ))
+        fi
+    fi
+    echo ""
+
+    # ─ Schritt 14: IPv6-Adressmodus (NM/dhcpcd) ───────────────────────────
+    echo -e "${CYAN}[14/$TOTAL] IPv6-Adressmodus (NetworkManager/dhcpcd):${NC}"
+    local NM_ACTIVE DHCPCD_ACTIVE ADDR_ETH0 MAC M0 M1 M2 M3 M4 M5 B0 EXPECT_SUFFIX EXT_IP
+    NM_ACTIVE=$(systemctl is-active NetworkManager 2>/dev/null || echo "inactive")
+    DHCPCD_ACTIVE=$(systemctl is-active dhcpcd 2>/dev/null || echo "inactive")
+    ADDR_ETH0=$(sysctl -n net.ipv6.conf.eth0.addr_gen_mode 2>/dev/null || echo "?")
+
+    if [[ "$NM_ACTIVE" == "active" ]]; then
+        echo -e "  ${YELLOW}⚠  NetworkManager aktiv (dhcpcd/slaac-Einträge werden oft ignoriert)${NC}"
+    elif [[ "$DHCPCD_ACTIVE" == "active" ]]; then
+        echo -e "  ${GREEN}✔  dhcpcd aktiv${NC}"
+    else
+        echo -e "  ${YELLOW}⚠  Kein klarer Netzwerkmanager erkannt (NM/dhcpcd)${NC}"
+    fi
+
+    if [[ "$ADDR_ETH0" == "0" ]]; then
+        echo -e "  ${GREEN}✔  addr_gen_mode eth0 = 0 (EUI-64)${NC}"
+    else
+        echo -e "  ${RED}✘  addr_gen_mode eth0 = ${ADDR_ETH0} (nicht EUI-64)${NC}"
+        echo -e "  ${DIM}→ Bei NetworkManager: nmcli connection modify <profil> ipv6.addr-gen-mode eui64 ipv6.ip6-privacy 0${NC}"
+        (( ERRORS++ ))
+    fi
+
+    if [[ -r /sys/class/net/eth0/address ]]; then
+        MAC=$(tr '[:upper:]' '[:lower:]' < /sys/class/net/eth0/address 2>/dev/null)
+        IFS=':' read -r M0 M1 M2 M3 M4 M5 <<< "$MAC"
+        if [[ -n "$M0" && -n "$M5" ]]; then
+            B0=$(printf '%02x' $((16#$M0 ^ 2)))
+            EXPECT_SUFFIX="${B0}${M1}:${M2}ff:fe${M3}:${M4}${M5}"
+            EXT_IP=$(curl -6 -s --max-time 5 ifconfig.co 2>/dev/null || true)
+            if [[ -n "$EXT_IP" ]]; then
+                if [[ "${EXT_IP,,}" == *":${EXPECT_SUFFIX}" ]]; then
+                    echo -e "  ${GREEN}✔  Öffentliche IPv6 endet auf erwarteten Suffix ::${EXPECT_SUFFIX}${NC}"
+                else
+                    echo -e "  ${YELLOW}⚠  Öffentliche IPv6-Suffix weicht ab (aktuell: ${EXT_IP})${NC}"
+                    echo -e "  ${DIM}→ Typischer Auslöser für 'Handy geht, OPNsense nicht' nach Präfixwechsel${NC}"
+                fi
+            fi
         fi
     fi
     echo ""
@@ -1675,6 +1806,7 @@ text_diag() {
         echo -e "  ${BOLD}[7]${NC}  Ping Heimnetz-Gateway  ($HAUPT_GW)"
         echo -e "  ${BOLD}[8]${NC}  tcpdump UDP 51820  (live, Ctrl+C)"
         echo -e "  ${BOLD}[9]${NC}  Tools installieren  (tcpdump, dnsutils, nmap)"
+        echo -e "  ${BOLD}[10]${NC}  OPNsense Site-to-Site Diagnose"
         blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
         blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
         read -r C
@@ -1812,6 +1944,11 @@ text_diag() {
                         && echo -e "\n  ${GREEN}✔  Installation erfolgreich${NC}" \
                         || echo -e "\n  ${RED}✘  Fehler${NC}"
                 fi
+                press_enter
+                ;;
+            10)
+                clear
+                opnsense_s2s_diag
                 press_enter
                 ;;
             0|"") return ;;

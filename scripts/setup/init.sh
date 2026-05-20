@@ -47,6 +47,24 @@ else
     fi
 fi
 
+# ─── .env-Guard: VPN_HOST prüfen ────────────────────────────────────────────
+if [[ -f "$ENV_FILE" ]]; then
+    VPN_HOST_LINE=$(grep -E '^VPN_HOST=' "$ENV_FILE" 2>/dev/null | head -1 || true)
+    VPN_HOST_VALUE="${VPN_HOST_LINE#VPN_HOST=}"
+    VPN_HOST_VALUE="${VPN_HOST_VALUE%\"}"
+    VPN_HOST_VALUE="${VPN_HOST_VALUE#\"}"
+
+    if [[ -z "$VPN_HOST_LINE" || -z "$VPN_HOST_VALUE" ]]; then
+        warn "VPN_HOST fehlt in .env — Dashboard kann AAAA-Record nicht anzeigen."
+        warn "Bitte setzen: VPN_HOST=vpn.deine-domain.de"
+    elif [[ "$VPN_HOST_VALUE" == "vpn.deine-domain.de" ]]; then
+        warn "VPN_HOST ist noch Platzhalter ($VPN_HOST_VALUE)."
+        warn "Bitte auf deine echte Domain ändern, z.B. VPN_HOST=vpn.rexxlab.uk"
+    else
+        info "VPN_HOST erkannt: $VPN_HOST_VALUE"
+    fi
+fi
+
 # ─── .gitignore erstellen ─────────────────────────────────────────────────────
 GITIGNORE="$PROJECT_ROOT/.gitignore"
 if [[ ! -f "$GITIGNORE" ]]; then

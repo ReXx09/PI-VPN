@@ -155,11 +155,63 @@ fi
 
 # slaac-Modus
 SLAAC=$(grep -E '^slaac ' /etc/dhcpcd.conf 2>/dev/null | awk '{print $2}' | head -1 || true)
-if [[ "$SLAAC" == "hwaddr" ]]; then
-    ok "slaac hwaddr: Suffix fest — Dauerlösung aktiv"
+NM_ACTIVE=$(systemctl is-active NetworkManager 2>/dev/null || echo "inactive")
+DHCPCD_ACTIVE=$(systemctl is-active dhcpcd 2>/dev/null || echo "inactive")
+
+if [[ "$NM_ACTIVE" == "active" ]]; then
+    warn "NetworkManager aktiv — /etc/dhcpcd.conf (slaac) wird typischerweise ignoriert"
+    hint "IPv6-Adressmodus in NetworkManager prüfen (nmcli)"
 else
-    warn "slaac ${SLAAC:-private}: Suffix ändert sich bei Präfixwechsel!"
-    hint "Diagnosemenü Option 11: IPv6-Suffix fixieren (Dauerlösung)"
+    if [[ "$SLAAC" == "hwaddr" ]]; then
+        ok "slaac hwaddr: Suffix fest — Dauerlösung aktiv"
+    else
+        warn "slaac ${SLAAC:-private}: Suffix ändert sich bei Präfixwechsel!"
+        hint "Diagnosemenü Option 11: IPv6-Suffix fixieren (Dauerlösung)"
+    fi
+fi
+
+if [[ "$DHCPCD_ACTIVE" == "active" ]]; then
+    ok "dhcpcd: aktiv"
+elif [[ "$NM_ACTIVE" == "active" ]]; then
+    ok "dhcpcd: inaktiv (ok, da NetworkManager aktiv)"
+else
+    warn "Weder dhcpcd noch NetworkManager aktiv erkannt"
+fi
+
+ADDR_ETH0=$(sysctl -n net.ipv6.conf.eth0.addr_gen_mode 2>/dev/null || echo "?")
+ADDR_DEF=$(sysctl -n net.ipv6.conf.default.addr_gen_mode 2>/dev/null || echo "?")
+ADDR_ALL=$(sysctl -n net.ipv6.conf.all.addr_gen_mode 2>/dev/null || echo "?")
+
+if [[ "$ADDR_ETH0" == "0" ]]; then
+    ok "addr_gen_mode eth0: 0 (EUI-64)"
+else
+    fail "addr_gen_mode eth0: ${ADDR_ETH0} (nicht EUI-64)"
+    hint "Bei NetworkManager: nmcli connection modify ... ipv6.addr-gen-mode eui64"
+fi
+
+if [[ "$ADDR_DEF" == "0" && "$ADDR_ALL" == "0" ]]; then
+    ok "addr_gen_mode default/all: 0/0"
+else
+    warn "addr_gen_mode default/all: ${ADDR_DEF}/${ADDR_ALL} (abweichend)"
+fi
+
+if [[ -r /sys/class/net/eth0/address ]]; then
+    MAC=$(tr '[:upper:]' '[:lower:]' < /sys/class/net/eth0/address 2>/dev/null)
+    IFS=':' read -r M0 M1 M2 M3 M4 M5 <<< "$MAC"
+    if [[ -n "$M0" && -n "$M5" ]]; then
+        B0=$(printf '%02x' $((16#$M0 ^ 2)))
+        EXPECT_SUFFIX="${B0}${M1}:${M2}ff:fe${M3}:${M4}${M5}"
+        ok "Erwarteter EUI-64-Suffix: ::${EXPECT_SUFFIX}"
+
+        if [[ -n "$EXT_IPV6" ]]; then
+            if [[ "${EXT_IPV6,,}" == *":${EXPECT_SUFFIX}" ]]; then
+                ok "Öffentliche IPv6 nutzt den erwarteten EUI-64-Suffix"
+            else
+                fail "Öffentliche IPv6 nutzt NICHT den erwarteten EUI-64-Suffix"
+                hint "Aktuell: $EXT_IPV6"
+            fi
+        fi
+    fi
 fi
 
 # Aktueller Präfix extrahieren
