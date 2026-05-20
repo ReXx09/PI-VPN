@@ -641,13 +641,117 @@ show_webui_addresses_wt() {
         19 64
 }
 
-# ─── Untermenü: Diagnose & Tools ─────────────────────────────────────────────
+# ─── Kombinierte Schnell-Diagnose (für Einsteiger) ──────────────────────────
+diag_quick_report() {
+    echo -e "${BOLD}═══ Schnell-Diagnose (kombiniert) ═══${NC}\n"
+
+    echo -e "${CYAN}[1/5] WireGuard Handshake:${NC}"
+    if ip link show wg0 &>/dev/null; then
+        local HS
+        HS=$(wg show wg0 latest-handshakes 2>/dev/null | awk '{print $2}' | head -1)
+        if [[ -n "$HS" && "$HS" != "0" ]]; then
+            local AGO=$(( $(date +%s) - HS ))
+            echo -e "  ${GREEN}✔${NC}  Handshake vor ${AGO}s"
+        else
+            echo -e "  ${RED}✘${NC}  Kein Handshake"
+        fi
+    else
+        echo -e "  ${RED}✘${NC}  wg0 nicht aktiv"
+    fi
+
+    echo -e "\n${CYAN}[2/5] DNS & DDNS (${VPN_HOST}):${NC}"
+    if command -v dig &>/dev/null; then
+        local AAAA EXT6
+        AAAA=$(dig "$VPN_HOST" AAAA +short +time=3 2>/dev/null | head -1)
+        EXT6=$(curl -6 -s --max-time 6 ifconfig.co 2>/dev/null || true)
+        [[ -n "$AAAA" ]] && echo -e "  AAAA: ${GREEN}${AAAA}${NC}" || echo -e "  AAAA: ${RED}(nicht auflösbar)${NC}"
+        if [[ -n "$AAAA" && -n "$EXT6" ]]; then
+            [[ "$AAAA" == "$EXT6" ]] \
+                && echo -e "  ${GREEN}✔${NC}  DNS = aktuelle öffentliche IPv6" \
+                || echo -e "  ${YELLOW}⚠${NC}  DNS ≠ aktuelle öffentliche IPv6 (Präfixwechsel?)"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠${NC}  dig fehlt (Tools installieren im erweiterten Menü)"
+    fi
+
+    echo -e "\n${CYAN}[3/5] Erreichbarkeit durch den Tunnel:${NC}"
+    if ip link show wg0 &>/dev/null; then
+        local PEER_IP
+        PEER_IP=$(vpn_peer_ip)
+        if [[ -n "$PEER_IP" ]]; then
+            ping -c 2 -W 1 "$PEER_IP" &>/dev/null \
+                && echo -e "  ${GREEN}✔${NC}  VPN-Peer ${PEER_IP} erreichbar" \
+                || echo -e "  ${RED}✘${NC}  VPN-Peer ${PEER_IP} nicht erreichbar"
+        else
+            echo -e "  ${YELLOW}⚠${NC}  Kein Peer in wg0 gefunden"
+        fi
+
+        if [[ -n "$HAUPT_GW" ]]; then
+            ping -c 2 -W 1 "$HAUPT_GW" &>/dev/null \
+                && echo -e "  ${GREEN}✔${NC}  Heimnetz-Gateway ${HAUPT_GW} erreichbar" \
+                || echo -e "  ${YELLOW}⚠${NC}  Heimnetz-Gateway ${HAUPT_GW} nicht erreichbar"
+        fi
+    else
+        echo -e "  ${DIM}wg0 nicht aktiv — Tunnel-Pings übersprungen${NC}"
+    fi
+
+    echo -e "\n${CYAN}[4/5] Hardwarewechsel-Check:${NC}"
+    local ID_FILE CUR_MAC BASE_MAC
+    ID_FILE="/opt/pi-vpn/.host_identity"
+    CUR_MAC=$(cat /sys/class/net/eth0/address 2>/dev/null || true)
+    if [[ -f "$ID_FILE" ]]; then
+        BASE_MAC=$(grep '^BASE_ETH0_MAC=' "$ID_FILE" 2>/dev/null | cut -d= -f2- || true)
+        if [[ -n "$BASE_MAC" && -n "$CUR_MAC" && "$BASE_MAC" != "$CUR_MAC" ]]; then
+            echo -e "  ${YELLOW}⚠${NC}  MAC geändert (${BASE_MAC} -> ${CUR_MAC})"
+            echo -e "  ${DIM}→ Fritzbox: DHCP-Reservierung + IPv6-Freigaben für neues Gerät prüfen${NC}"
+        else
+            echo -e "  ${GREEN}✔${NC}  Keine MAC-Änderung erkannt"
+        fi
+    else
+        echo -e "  ${DIM}Keine Referenz gespeichert (wird im check.sh gesetzt)${NC}"
+    fi
+
+    echo -e "\n${CYAN}[5/5] Empfehlung:${NC}"
+    echo -e "  ${DIM}Bei Problemen: erst 'Automatische Reparatur', danach 'Vollständiger Diagnose-Report'.${NC}"
+    echo -e "\n${BOLD}═══ Schnell-Diagnose Ende ═══${NC}"
+}
+
+# ─── Untermenü: Diagnose & Tools (Einsteiger) ───────────────────────────────
 menu_diag_wt() {
     while true; do
         local CHOICE
         CHOICE=$(whiptail \
             --title "PI-VPN | Diagnose & Tools" \
-            --menu "\nVerbindungstests und Diagnose-Werkzeuge:" \
+            --menu "\nEinsteiger-Menü: die wichtigsten Aktionen zuerst." \
+            22 76 10 \
+            "1" "  🚦  Schnell-Diagnose (kombiniert, empfohlen)" \
+            "2" "  📋  Vollständiger Diagnose-Report  (check.sh)" \
+            "3" "  🔨  Automatische Reparatur         (repair.sh)" \
+            "4" "  🧭  OPNsense Site-to-Site Diagnose" \
+            "5" "  🌐  IPv6-Präfix aktualisieren" \
+            "6" "  🧰  Erweiterte Einzeltests & Tools" \
+            "0" "  ← Zurück zum Hauptmenü" \
+            3>&1 1>&2 2>&3) || return
+
+        case "$CHOICE" in
+            1) clear; diag_quick_report; press_enter ;;
+            2) clear; bash "$MANAGE_DIR/check.sh"; press_enter ;;
+            3) clear; bash "$MANAGE_DIR/repair.sh"; press_enter ;;
+            4) clear; opnsense_s2s_diag; press_enter ;;
+            5) clear; prefix_fix; press_enter ;;
+            6) menu_diag_advanced_wt ;;
+            0|"") return ;;
+        esac
+    done
+}
+
+# ─── Untermenü: Diagnose & Tools (Erweitert) ────────────────────────────────
+menu_diag_advanced_wt() {
+    while true; do
+        local CHOICE
+        CHOICE=$(whiptail \
+            --title "PI-VPN | Diagnose & Tools (Erweitert)" \
+            --menu "\nEinzeltests und Spezialwerkzeuge:" \
             32 76 15 \
             "1" "  🔧  System-Autofix  (prüfen & automatisch beheben)" \
             "2" "  Alle Tests auf einmal" \
@@ -1861,6 +1965,31 @@ text_diag() {
     while true; do
         clear; blank
         echo -e "  ${BOLD}[DIAGNOSE] Diagnose & Tools${NC}"; blank
+        echo -e "  ${BOLD}[1]${NC}  🚦  Schnell-Diagnose (kombiniert, empfohlen)"
+        echo -e "  ${BOLD}[2]${NC}  📋  Vollständiger Diagnose-Report  (check.sh)"
+        echo -e "  ${BOLD}[3]${NC}  🔨  Automatische Reparatur         (repair.sh)"
+        echo -e "  ${BOLD}[4]${NC}  🧭  OPNsense Site-to-Site Diagnose"
+        echo -e "  ${BOLD}[5]${NC}  🌐  IPv6-Präfix aktualisieren"
+        echo -e "  ${BOLD}[6]${NC}  🧰  Erweiterte Einzeltests & Tools"
+        blank; echo -e "  ${BOLD}[0]${NC}  ← Zurück"
+        blank; echo -ne "  ${CYAN}▶${NC} Auswahl: "
+        read -r C
+        case "$C" in
+            1) clear; diag_quick_report; press_enter ;;
+            2) clear; bash "$MANAGE_DIR/check.sh"; press_enter ;;
+            3) clear; bash "$MANAGE_DIR/repair.sh"; press_enter ;;
+            4) clear; opnsense_s2s_diag; press_enter ;;
+            5) clear; prefix_fix; press_enter ;;
+            6) text_diag_advanced ;;
+            0|"") return ;;
+        esac
+    done
+}
+
+text_diag_advanced() {
+    while true; do
+        clear; blank
+        echo -e "  ${BOLD}[DIAGNOSE] Diagnose & Tools (Erweitert)${NC}"; blank
         echo -e "  ${BOLD}[1]${NC}  🔧  System-Autofix  (prüfen & automatisch beheben)"
         echo -e "  ${BOLD}[2]${NC}  Alle Tests auf einmal"
         echo -e "  ${BOLD}[3]${NC}  WireGuard Handshake prüfen"

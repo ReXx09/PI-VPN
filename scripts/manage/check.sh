@@ -469,7 +469,58 @@ echo -e "  ${DIM}  → Bei Präfixwechsel: Ziel-IPv6 in Portfreigabe aktualisier
 echo -e "  ${DIM}    (oder: Suffix fixieren → Option 11 → einmalig aktualisieren)${NC}"
 
 # =============================================================================
-# 11. KONFIGURATION (.env)
+# 11. HARDWAREWECHSEL-SCHUTZ
+# =============================================================================
+sect "HARDWAREWECHSEL-SCHUTZ"
+
+IDENTITY_FILE="/opt/pi-vpn/.host_identity"
+CUR_MAC=$(cat /sys/class/net/eth0/address 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+CUR_HOST=$(hostname 2>/dev/null || true)
+CUR_WG_PUB=$(wg show wg0 public-key 2>/dev/null || true)
+
+if [[ -f "$IDENTITY_FILE" ]]; then
+    BASE_MAC=$(grep '^BASE_ETH0_MAC=' "$IDENTITY_FILE" 2>/dev/null | cut -d= -f2- | tr '[:upper:]' '[:lower:]' || true)
+    BASE_HOST=$(grep '^BASE_HOSTNAME=' "$IDENTITY_FILE" 2>/dev/null | cut -d= -f2- || true)
+    BASE_WG_PUB=$(grep '^BASE_WG_PUBLIC_KEY=' "$IDENTITY_FILE" 2>/dev/null | cut -d= -f2- || true)
+
+    if [[ -n "$BASE_MAC" && -n "$CUR_MAC" && "$BASE_MAC" != "$CUR_MAC" ]]; then
+        fail "Geräte-MAC geändert: $BASE_MAC -> $CUR_MAC"
+        hint "Fritzbox: Gerät neu zuordnen, DHCP-Reservierung und IPv6-Portfreigaben prüfen"
+        hint "Wenn neuer Pi: gleicher WireGuard-Key empfohlen oder Peer-Public-Key auf Gegenstelle aktualisieren"
+    else
+        ok "Geräte-MAC unverändert"
+    fi
+
+    if [[ -n "$BASE_HOST" && -n "$CUR_HOST" && "$BASE_HOST" != "$CUR_HOST" ]]; then
+        warn "Hostname geändert: $BASE_HOST -> $CUR_HOST"
+    else
+        ok "Hostname unverändert"
+    fi
+
+    if [[ -n "$BASE_WG_PUB" && -n "$CUR_WG_PUB" && "$BASE_WG_PUB" != "$CUR_WG_PUB" ]]; then
+        fail "WireGuard Public Key geändert"
+        hint "OPNsense/Peers: Public Key dieses Standorts aktualisieren"
+    elif [[ -n "$CUR_WG_PUB" ]]; then
+        ok "WireGuard Public Key unverändert"
+    else
+        warn "WireGuard Public Key nicht ermittelbar (wg0 aktiv?)"
+    fi
+else
+    {
+        echo "# PI-VPN Hardware-Referenz (automatisch erzeugt)"
+        echo "BASE_ETH0_MAC=${CUR_MAC}"
+        echo "BASE_HOSTNAME=${CUR_HOST}"
+        echo "BASE_WG_PUBLIC_KEY=${CUR_WG_PUB}"
+        echo "CREATED_AT=$(date -Iseconds)"
+    } > "$IDENTITY_FILE"
+    chmod 600 "$IDENTITY_FILE" 2>/dev/null || true
+
+    warn "Keine Hardware-Referenz vorhanden — wurde jetzt angelegt: $IDENTITY_FILE"
+    hint "Beim nächsten check.sh werden MAC/Key-Änderungen automatisch erkannt"
+fi
+
+# =============================================================================
+# 12. KONFIGURATION (.env)
 # =============================================================================
 sect "KONFIGURATION (.env)"
 
