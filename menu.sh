@@ -471,12 +471,13 @@ menu_config_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN -- Konfiguration & Updates" \
             --menu "\nWas soll bearbeitet werden?" \
-            20 68 6 \
+            22 72 7 \
             "1" "  .env-Datei bearbeiten              (nano)" \
             "2" "  docker-compose.yml anzeigen" \
             "3" "  Updates vom GitHub holen      (git pull)" \
             "4" "  WireGuard-Konfig anzeigen    (wg0.conf)" \
             "5" "  Raspberry Pi Systeminformationen" \
+            "6" "  Raspberry Pi System aktualisieren   (apt)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -531,6 +532,29 @@ menu_config_wt() {
                 df -h / | tail -1 | awk '{printf "    gesamt: %s  frei: %s  verw.: %s\n", $2, $4, $5}'
                 echo -e "  ${CYAN}Docker:${NC}        $(docker --version 2>/dev/null || echo 'nicht installiert')"
                 press_enter
+                ;;
+            6)
+                if whiptail --title "Systemupdate starten" --yesno \
+                    "Es werden jetzt Raspberry-Pi-Systemupdates installiert:\n\n  • apt update\n  • apt full-upgrade -y\n  • apt autoremove -y\n  • rpi-eeprom-update -a (falls verfügbar)\n\nJe nach Internet/SD/USB kann das einige Minuten dauern.\n\nJetzt starten?" \
+                    17 74; then
+                    clear
+                    echo -e "${BOLD}Raspberry Pi System aktualisieren…${NC}\n"
+                    apt update \
+                        && apt full-upgrade -y \
+                        && apt autoremove -y \
+                        && apt autoclean -y
+
+                    if command -v rpi-eeprom-update &>/dev/null; then
+                        echo ""
+                        rpi-eeprom-update -a || true
+                    fi
+
+                    if whiptail --title "Neustart empfohlen" --yesno \
+                        "Updates abgeschlossen.\n\nSoll der Raspberry Pi jetzt neu gestartet werden?" \
+                        10 64; then
+                        reboot
+                    fi
+                fi
                 ;;
             0|"") return ;;
         esac
