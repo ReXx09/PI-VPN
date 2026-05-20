@@ -57,10 +57,16 @@ blank
 
 # ─── Backups suchen ───────────────────────────────────────────────────────────
 declare -a FOUND_BACKUPS=()
+declare -A SEEN_BACKUP_NAMES=()
 for DIR in "${SEARCH_DIRS[@]}"; do
     if [[ -d "$DIR" ]]; then
         while IFS= read -r -d '' f; do
-            FOUND_BACKUPS+=("$f")
+            NAME="$(basename "$f")"
+            # Gleichnamige Backups nur einmal anzeigen (Priorität: erstes Suchverzeichnis).
+            if [[ -z "${SEEN_BACKUP_NAMES[$NAME]:-}" ]]; then
+                FOUND_BACKUPS+=("$f")
+                SEEN_BACKUP_NAMES[$NAME]=1
+            fi
         done < <(find "$DIR" -maxdepth 1 -name "pi-vpn-backup_*.tar.gz" -print0 2>/dev/null | sort -rz)
     fi
 done
