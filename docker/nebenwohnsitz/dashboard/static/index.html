@@ -449,7 +449,7 @@
       } else if (dn.dns_reason === 'hostname_missing') {
         set('ddns-dip6', '<span class="c-orange">Hostname fehlt (VPN_HOST)</span>');
       } else if (dn.dns_reason === 'no_aaaa') {
-        set('ddns-dip6', '<span class="c-yellow">Kein AAAA-Record gefunden</span>');
+        set('ddns-dip6', '<span class="c-yellow">⏳ AAAA-Record propagiert noch... (bis zu 2 Min)</span>');
       } else if (dn.dns_reason === 'dig_missing') {
         set('ddns-dip6', '<span class="c-red">dig fehlt im Container</span>');
       } else if (dn.dns_reason === 'lookup_failed') {

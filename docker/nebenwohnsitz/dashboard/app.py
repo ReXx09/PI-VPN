@@ -190,28 +190,38 @@ def local_ipv6():
 
 
 def dns_aaaa(hostname):
-    """AAAA-Record per dig auflösen, inkl. Fehlergrund."""
+    """AAAA-Record per dig auflösen mit Retry-Logik, inkl. Fehlergrund."""
     if not hostname:
         return None, "hostname_missing"
     if not shutil.which("dig"):
         return None, "dig_missing"
 
-    try:
-        proc = subprocess.run(
-            ["dig", hostname, "AAAA", "+short", "+time=3"],
-            text=True,
-            capture_output=True,
-            timeout=5,
-            check=False,
-        )
-    except Exception:
-        return None, "lookup_failed"
+    # Retry-Logik: Versuche bis zu 3x mit verschiedenen Nameservern
+    attempts = [
+        ["dig", hostname, "AAAA", "+short", "+time=2"],  # Standard
+        ["dig", "@1.1.1.1", hostname, "AAAA", "+short", "+time=2"],  # Cloudflare
+        ["dig", "@8.8.8.8", hostname, "AAAA", "+short", "+time=2"],   # Google
+    ]
+    
+    for attempt, cmd in enumerate(attempts):
+        try:
+            proc = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+        except Exception:
+            continue
 
-    out = proc.stdout or ""
-    lines = [l.strip() for l in out.strip().split("\n")
-             if l.strip() and not l.startswith(";")]
-    if lines:
-        return lines[0], None
+        out = proc.stdout or ""
+        lines = [l.strip() for l in out.strip().split("\n")
+                 if l.strip() and not l.startswith(";")]
+        if lines:
+            return lines[0], None
+    
+    # Keine Antwort von allen Servern
     return None, "no_aaaa"
 
 
