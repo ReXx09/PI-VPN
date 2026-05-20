@@ -26,11 +26,13 @@ NC_URL=""          # https://cloud.deine-domain.de
 NC_USER=""         # Nextcloud-Benutzername
 NC_PASS=""         # Nextcloud App-Passwort (NICHT dein Login-Passwort)
 NC_PATH=""         # Zielordner auf Nextcloud z.B. /PI-VPN-Backups
+NC_DAV_USER=""     # Optional: interner Nextcloud-User fuer /remote.php/dav/files/<user>/
 if [[ -f "$ENV_FILE" ]]; then
     NC_URL=$(grep  -E '^NC_URL='  "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
     NC_USER=$(grep -E '^NC_USER=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
     NC_PASS=$(grep -E '^NC_PASS=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
     NC_PATH=$(grep -E '^NC_PATH=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
+    NC_DAV_USER=$(grep -E '^NC_DAV_USER=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
 fi
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -110,37 +112,86 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
     NC_PATH="/${NC_PATH#/}"
     BASENAME="$(basename "$EXPORT_FILE")"
 
-    # WebDAV-URL zusammensetzen: <NC_URL>/remote.php/dav/files/<NC_USER><NC_PATH>/
-    WEBDAV_BASE="${NC_URL%/}/remote.php/dav/files/${NC_USER}${NC_PATH}"
-    WEBDAV_URL="${WEBDAV_BASE}/${BASENAME}"
+    # Auth-User (Login) und DAV-Pfad-User (interne UID) können unterschiedlich sein.
+    AUTH_USER="$NC_USER"
+    DAV_USER_PRIMARY="${NC_DAV_USER:-$NC_USER}"
+
+    declare -A DAV_SEEN=()
+    declare -a DAV_CANDIDATES=()
+    add_dav_candidate() {
+        local cand="$1"
+        [[ -z "$cand" ]] && return 0
+        if [[ -z "${DAV_SEEN[$cand]:-}" ]]; then
+            DAV_SEEN[$cand]=1
+            DAV_CANDIDATES+=("$cand")
+        fi
+    }
+
+    add_dav_candidate "$DAV_USER_PRIMARY"
+    if [[ "$NC_USER" == *"@"* ]]; then
+        add_dav_candidate "${NC_USER%@*}"
+    fi
+
+    # Interne UID über OCS ermitteln (falls erreichbar), damit /dav/files/<uid>/ stimmt.
+    OCS_UID=$(curl -s \
+        -u "${AUTH_USER}:${NC_PASS}" \
+        -H "OCS-APIRequest: true" \
+        "${NC_URL%/}/ocs/v1.php/cloud/user?format=json" 2>/dev/null \
+        | tr -d '\n' \
+        | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' || true)
+    add_dav_candidate "$OCS_UID"
 
     echo ""
     info "Nextcloud: Lade Backup hoch…"
-    info "Ziel: ${WEBDAV_URL}"
 
-    # Zielordner per MKCOL anlegen (ignoriert 405 = existiert bereits)
-    HTTP_MKCOL=$(curl -s -o /dev/null -w "%{http_code}" \
-        -u "${NC_USER}:${NC_PASS}" \
-        -X MKCOL \
-        "${WEBDAV_BASE}/" 2>/dev/null || true)
-    [[ "$HTTP_MKCOL" =~ ^(201|405|301|302)$ ]] || \
-        warn "MKCOL Ordner-Anlage: HTTP $HTTP_MKCOL (wird ignoriert — Upload trotzdem versucht)"
+    UPLOAD_OK=0
+    HTTP_MKCOL="000"
+    HTTP_PUT="000"
+    LAST_DAV_USER=""
+    WEBDAV_BASE=""
+    WEBDAV_URL=""
 
-    # Datei hochladen via HTTP PUT
-    HTTP_PUT=$(curl -s -o /dev/null -w "%{http_code}" \
-        -u "${NC_USER}:${NC_PASS}" \
-        -T "$EXPORT_FILE" \
-        --max-time 120 \
-        "${WEBDAV_URL}" 2>/dev/null || true)
+    for DAV_USER in "${DAV_CANDIDATES[@]}"; do
+        WEBDAV_BASE="${NC_URL%/}/remote.php/dav/files/${DAV_USER}${NC_PATH}"
+        WEBDAV_URL="${WEBDAV_BASE}/${BASENAME}"
+        LAST_DAV_USER="$DAV_USER"
 
-    if [[ "$HTTP_PUT" =~ ^(200|201|204)$ ]]; then
+        info "Ziel: ${WEBDAV_URL}"
+
+        # Zielordner per MKCOL anlegen (405/409 = existiert bereits bzw. konflikt)
+        HTTP_MKCOL=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "${AUTH_USER}:${NC_PASS}" \
+            -X MKCOL \
+            "${WEBDAV_BASE}/" 2>/dev/null || true)
+        [[ "$HTTP_MKCOL" =~ ^(201|405|409|301|302)$ ]] || \
+            warn "MKCOL Ordner-Anlage: HTTP $HTTP_MKCOL (wird ignoriert — Upload trotzdem versucht)"
+
+        # Datei hochladen via HTTP PUT
+        HTTP_PUT=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "${AUTH_USER}:${NC_PASS}" \
+            -T "$EXPORT_FILE" \
+            --max-time 120 \
+            "${WEBDAV_URL}" 2>/dev/null || true)
+
+        if [[ "$HTTP_PUT" =~ ^(200|201|204)$ ]]; then
+            UPLOAD_OK=1
+            break
+        fi
+    done
+
+    if [[ "$UPLOAD_OK" -eq 1 ]]; then
         ok "Nextcloud: Upload erfolgreich (HTTP $HTTP_PUT)"
         info "Nextcloud-Pfad: ${NC_PATH}/${BASENAME}"
+        if [[ -n "$NC_DAV_USER" && "$NC_DAV_USER" != "$LAST_DAV_USER" ]]; then
+            warn "Hinweis: Genutzter DAV-User ist '$LAST_DAV_USER' statt NC_DAV_USER='$NC_DAV_USER'."
+        elif [[ -z "$NC_DAV_USER" && "$LAST_DAV_USER" != "$NC_USER" ]]; then
+            warn "Hinweis: Für stabile Uploads optional in .env setzen: NC_DAV_USER=$LAST_DAV_USER"
+        fi
 
         # Alte Backups auf Nextcloud aufräumen (behalte letzte 10)
         info "Nextcloud: Bereinige alte Backups (behalte letzte 10)…"
         REMOTE_LIST=$(curl -s \
-            -u "${NC_USER}:${NC_PASS}" \
+            -u "${AUTH_USER}:${NC_PASS}" \
             -X PROPFIND \
             -H "Depth: 1" \
             "${WEBDAV_BASE}/" 2>/dev/null \
@@ -153,7 +204,7 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
             if [[ $COUNT -gt 10 ]]; then
                 DEL_URL="${NC_URL%/}${REMOTE_FILE}"
                 HTTP_DEL=$(curl -s -o /dev/null -w "%{http_code}" \
-                    -u "${NC_USER}:${NC_PASS}" \
+                    -u "${AUTH_USER}:${NC_PASS}" \
                     -X DELETE \
                     "$DEL_URL" 2>/dev/null || true)
                 [[ "$HTTP_DEL" =~ ^(204|200)$ ]] \
@@ -163,7 +214,13 @@ if [[ -n "$NC_URL" && -n "$NC_USER" && -n "$NC_PASS" ]]; then
         done <<< "$REMOTE_LIST"
     else
         warn "Nextcloud: Upload fehlgeschlagen (HTTP $HTTP_PUT)"
-        warn "Prüfe: NC_URL, NC_USER, NC_PASS in .env — App-Passwort verwenden!"
+        if [[ "$HTTP_PUT" == "401" ]]; then
+            warn "Auth-Fehler (401): Prüfe NC_USER (Login), NC_PASS (App-Passwort) und 2FA/App-Passwort."
+        elif [[ "$HTTP_PUT" == "404" ]]; then
+            warn "Pfad-Fehler (404): Prüfe internen DAV-User. Optional in .env: NC_DAV_USER=<interne_uid>."
+        else
+            warn "Prüfe: NC_URL, NC_USER, NC_PASS in .env — App-Passwort verwenden!"
+        fi
         warn "Backup ist lokal gespeichert: $EXPORT_FILE"
     fi
 else
