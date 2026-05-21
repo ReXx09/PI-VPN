@@ -101,7 +101,7 @@ def _names_from_wg_conf(path):
     return result
 
 
-def _names_from_boltdb(path):
+def _names_from_json_dir(path):
     """Peer-Namen aus wireguard-ui JSON-Dateien im clients/-Verzeichnis.
     wireguard-ui (ngoduykhanh) speichert jeden Client als separate JSON-Datei
     unter <db_dir>/clients/<uuid>.json"""
@@ -125,10 +125,10 @@ def _names_from_boltdb(path):
 
 
 def wgui_peer_names():
-    """Peer-Namen: BoltDB zuerst (authoritative), Fallback wg0.conf."""
-    names = _names_from_boltdb(WGUI_DB)
+    """Peer-Namen: JSON-Verzeichnis zuerst (authoritative), Fallback wg0.conf."""
+    names = _names_from_json_dir(WGUI_DB)
     if names:
-        print(f"[dash] peer-namen aus boltdb ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
+        print(f"[dash] peer-namen aus json-dir ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
         return names
     names = _names_from_wg_conf(WG_CONF)
     if names:
