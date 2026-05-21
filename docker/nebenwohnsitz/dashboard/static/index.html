@@ -133,6 +133,7 @@
     .tbl tbody tr:last-child { border: none; }
     .tbl tbody td { padding: 10px 10px; font-size: 13px; }
     .mono { font-family: monospace; }
+    .peer-name { font-weight: 600; color: var(--fg); font-size: 13px; }
 
     /* ── Log Box ── */
     .log-box {
@@ -469,7 +470,12 @@
       } else {
         const rows = peers.map(p => `
           <tr>
-            <td class="mono" style="font-size:11px;color:var(--muted)">${esc(p.public_key_short)}</td>
+            <td>
+              ${p.name
+                ? `<span class="peer-name">${esc(p.name)}</span><br><span class="mono" style="font-size:10px;color:var(--muted)" title="${esc(p.public_key)}">${esc(p.public_key_short)}</span>`
+                : `<span class="mono" style="font-size:11px;color:var(--muted)">${esc(p.public_key_short)}</span>`
+              }
+            </td>
             <td class="mono c-blue">${esc(p.allowed_ips)}</td>
             <td class="mono" style="font-size:11px;color:var(--muted)">${p.endpoint ? esc(p.endpoint) : '—'}</td>
             <td>${fmtAgo(p.handshake_ago)}</td>
@@ -479,7 +485,7 @@
         pw.innerHTML = `
           <table class="tbl">
             <thead><tr>
-              <th>Public Key</th><th>Allowed IPs</th><th>Endpoint</th>
+              <th>Peer</th><th>Allowed IPs</th><th>Endpoint</th>
               <th>Handshake</th><th>Empfangen</th><th>Gesendet</th>
             </tr></thead>
             <tbody>${rows}</tbody>

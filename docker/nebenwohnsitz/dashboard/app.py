@@ -2,6 +2,7 @@
 """PI-VPN Dashboard — Backend API (Flask)"""
 
 import os
+import sqlite3
 import subprocess
 import time
 import shutil
@@ -55,6 +56,22 @@ def docker_client():
 
 # ── Daten-Collector: WireGuard ────────────────────────────────────────────────
 
+# Pfad zur wireguard-ui SQLite-DB (gemountet via docker-compose volume)
+WGUI_DB = os.environ.get("WGUI_DB_PATH", "/app/wgui-db/server.db")
+
+def wgui_peer_names():
+    """Liest Public-Key → Name Mapping aus der wireguard-ui SQLite-DB.
+    Gibt leeres Dict zurück wenn DB nicht verfügbar."""
+    try:
+        con = sqlite3.connect(WGUI_DB, timeout=2)
+        cur = con.execute("SELECT public_key, name FROM clients")
+        result = {row[0]: row[1] for row in cur.fetchall()}
+        con.close()
+        return result
+    except Exception:
+        return {}
+
+
 def wg_data():
     """`wg show wg0 dump` parsen → (interface_up, peers_list)."""
     out = sh(["wg", "show", "wg0", "dump"])
@@ -62,6 +79,7 @@ def wg_data():
         return False, []
 
     now = int(time.time())
+    peer_names = wgui_peer_names()
     peers = []
     for i, line in enumerate(out.strip().split("\n")):
         if i == 0:
@@ -71,7 +89,9 @@ def wg_data():
             continue
         pub_key, _psk, endpoint, allowed_ips, latest_hs, rx, tx, _ka = parts[:8]
         hs = int(latest_hs) if latest_hs.isdigit() and latest_hs != "0" else 0
+        name = peer_names.get(pub_key, "")
         peers.append({
+            "name":             name,
             "public_key_short": pub_key[:20] + "…" if len(pub_key) > 20 else pub_key,
             "public_key":       pub_key,
             "endpoint":         endpoint if endpoint != "(none)" else None,
