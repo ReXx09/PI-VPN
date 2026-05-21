@@ -140,19 +140,19 @@ def _names_from_boltdb(path):
 
 
 def wgui_peer_names():
-    """Peer-Namen: erst wg0.conf, Fallback auf BoltDB-Binärsuche."""
-    names = _names_from_wg_conf(WG_CONF)
-    if names:
-        print(f"[dash] peer-namen aus wg0.conf ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
-        return names
+    """Peer-Namen: BoltDB zuerst (authoritative), Fallback wg0.conf."""
     names = _names_from_boltdb(WGUI_DB)
     if names:
         print(f"[dash] peer-namen aus boltdb ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
         return names
+    names = _names_from_wg_conf(WG_CONF)
+    if names:
+        print(f"[dash] peer-namen aus wg0.conf ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
+        return names
     print(
         f"[dash] WARN: keine peer-namen gefunden. "
-        f"wg_conf={WG_CONF} (exists={os.path.exists(WG_CONF)}), "
-        f"db={WGUI_DB} (exists={os.path.exists(WGUI_DB)})",
+        f"db={WGUI_DB} (exists={os.path.exists(WGUI_DB)}), "
+        f"wg_conf={WG_CONF} (exists={os.path.exists(WG_CONF)})",
         file=sys.stderr, flush=True,
     )
     return {}
