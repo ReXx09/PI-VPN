@@ -163,14 +163,14 @@ services:
       - /sys:/hostsys:ro
       # Host-Root (read-only): Disk-Auslastung des echten SD-Karten-Dateisystems
       - /:/hostroot:ro
-      # wireguard-ui DB (read-only): Peer-Namen aus der Peer-Verwaltung
-      - ./data/db:/app/wgui-db:ro
+      # wireguard-ui wg0.conf (read-only): Peer-Namen auslesen
+      - ./data/wireguard:/app/wireguard:ro
 
     environment:
       # Gleiche Variable wie in menu.sh — wird für DDNS-Abgleich verwendet
       - VPN_HOST=${VPN_HOST:-}
-      # Pfad zur wireguard-ui SQLite-DB (gemountet als /app/wgui-db)
-      - WGUI_DB_PATH=/app/wgui-db/server.db
+      # Pfad zur wg0.conf (aus wireguard-ui Volume gemountet)
+      - WG_CONF_PATH=/app/wireguard/wg0.conf
       # Nextcloud Backup-Status (optional — aus .env)
       - NC_URL=${NC_URL:-}
       - NC_USER=${NC_USER:-}

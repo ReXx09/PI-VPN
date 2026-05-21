@@ -2,7 +2,6 @@
 """PI-VPN Dashboard — Backend API (Flask)"""
 
 import os
-import sqlite3
 import subprocess
 import time
 import shutil
@@ -56,17 +55,38 @@ def docker_client():
 
 # ── Daten-Collector: WireGuard ────────────────────────────────────────────────
 
-# Pfad zur wireguard-ui SQLite-DB (gemountet via docker-compose volume)
-WGUI_DB = os.environ.get("WGUI_DB_PATH", "/app/wgui-db/server.db")
+# Pfad zur wg0.conf (gemountet via docker-compose volume)
+WG_CONF = os.environ.get("WG_CONF_PATH", "/app/wireguard/wg0.conf")
 
 def wgui_peer_names():
-    """Liest Public-Key → Name Mapping aus der wireguard-ui SQLite-DB.
-    Gibt leeres Dict zurück wenn DB nicht verfügbar."""
+    """Liest Public-Key → Name Mapping aus wg0.conf.
+    wireguard-ui schreibt den Peer-Namen als Kommentar direkt vor den [Peer]-Block:
+      # PeerName
+      [Peer]
+      PublicKey = <key>
+    Gibt leeres Dict zurück wenn Datei nicht verfügbar."""
     try:
-        con = sqlite3.connect(WGUI_DB, timeout=2)
-        cur = con.execute("SELECT public_key, name FROM clients")
-        result = {row[0]: row[1] for row in cur.fetchall()}
-        con.close()
+        with open(WG_CONF) as f:
+            lines = f.readlines()
+        result = {}
+        pending_name = None
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                # Kommentarzeile → potenzieller Name (letzter vor [Peer] gewinnt)
+                pending_name = stripped.lstrip("#").strip()
+            elif stripped == "[Peer]":
+                # [Peer]-Block beginnt, pending_name merken
+                pass  # Name wird beim PublicKey-Treffer zugeordnet
+            elif stripped.startswith("PublicKey") and "=" in stripped:
+                pub_key = stripped.split("=", 1)[1].strip()
+                if pending_name:
+                    result[pub_key] = pending_name
+                pending_name = None
+            elif stripped == "" or stripped.startswith("["):
+                # Neue Sektion oder Leerzeile → Name-Kontext zurücksetzen
+                if not stripped.startswith("[Peer]"):
+                    pending_name = None
         return result
     except Exception:
         return {}
