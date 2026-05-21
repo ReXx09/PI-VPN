@@ -102,40 +102,25 @@ def _names_from_wg_conf(path):
 
 
 def _names_from_boltdb(path):
-    """Peer-Namen aus wireguard-ui BoltDB durch binäre JSON-Suche.
-    wireguard-ui (ngoduykhanh) speichert jeden Client als JSON-Blob in BoltDB.
-    Wir suchen nach JSON-Objekten die mit '{"id"' beginnen und
-    sowohl 'public_key' als auch 'name' enthalten."""
-    try:
-        with open(path, "rb") as f:
-            raw = f.read()
-    except OSError:
-        return {}
+    """Peer-Namen aus wireguard-ui JSON-Dateien im clients/-Verzeichnis.
+    wireguard-ui (ngoduykhanh) speichert jeden Client als separate JSON-Datei
+    unter <db_dir>/clients/<uuid>.json"""
+    clients_dir = os.path.join(os.path.dirname(path), "clients")
     result = {}
-    for chunk in raw.split(b'{"id"')[1:]:
-        # Schließende Klammer des JSON-Objekts suchen
-        depth, end = 1, -1
-        for pos, b in enumerate(chunk):
-            if b == 0x7B:    # {
-                depth += 1
-            elif b == 0x7D:  # }
-                depth -= 1
-                if depth == 0:
-                    end = pos
-                    break
-        if end == -1:
-            continue
-        segment = b'{"id"' + chunk[:end + 1]
-        if b'"public_key"' not in segment or b'"name"' not in segment:
-            continue
-        try:
-            obj = _json.loads(segment)
-            pk = obj.get("public_key", "")
-            nm = obj.get("name", "")
-            if pk and nm:
-                result[pk] = nm
-        except Exception:
-            pass
+    try:
+        for fname in os.listdir(clients_dir):
+            fpath = os.path.join(clients_dir, fname)
+            try:
+                with open(fpath) as f:
+                    obj = _json.load(f)
+                pk = obj.get("public_key", "")
+                nm = obj.get("name", "")
+                if pk and nm:
+                    result[pk] = nm
+            except Exception:
+                pass
+    except Exception:
+        pass
     return result
 
 
