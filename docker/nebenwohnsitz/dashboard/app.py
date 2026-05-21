@@ -2,6 +2,8 @@
 """PI-VPN Dashboard — Backend API (Flask)"""
 
 import os
+import sys
+import json as _json
 import subprocess
 import time
 import shutil
@@ -55,41 +57,101 @@ def docker_client():
 
 # ── Daten-Collector: WireGuard ────────────────────────────────────────────────
 
-# Pfad zur wg0.conf (gemountet via docker-compose volume)
 WG_CONF = os.environ.get("WG_CONF_PATH", "/app/wireguard/wg0.conf")
+WGUI_DB = os.environ.get("WGUI_DB_PATH",  "/app/wgui-db/server.db")
+
+
+def _names_from_wg_conf(path):
+    """Peer-Namen aus wg0.conf parsen.
+    wireguard-ui schreibt '# <Name>' als Kommentar vor/nach [Peer].
+    Unterstützt auch '# Name: <Name>' und '### begin <Name> ###'."""
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+    except OSError:
+        return {}
+    result, pending = {}, None
+    for line in lines:
+        s = line.strip()
+        if not s:
+            pass                                            # Leerzeile: pending behalten
+        elif s.startswith("###"):                           # ### begin Name ###
+            inner = s.strip("#").strip()
+            if inner.lower().startswith("begin "):
+                pending = inner[6:].strip()
+        elif s.startswith("#"):                             # # Name  oder  # Name: Wert
+            candidate = s.lstrip("#").strip()
+            if candidate.lower().startswith("name:"):
+                candidate = candidate[5:].strip()
+            if candidate:
+                pending = candidate
+        elif s == "[Peer]":
+            pass                                            # pending behalten
+        elif s.startswith("PublicKey") and "=" in s:
+            key = s.split("=", 1)[1].strip()
+            if key and pending:
+                result[key] = pending
+            pending = None
+        elif s.startswith("[") and s != "[Peer]":
+            pending = None                                  # neue Sektion → reset
+    return result
+
+
+def _names_from_boltdb(path):
+    """Peer-Namen aus wireguard-ui BoltDB durch binäre JSON-Suche.
+    wireguard-ui (ngoduykhanh) speichert jeden Client als JSON-Blob in BoltDB.
+    Wir suchen nach JSON-Objekten die mit '{"id"' beginnen und
+    sowohl 'public_key' als auch 'name' enthalten."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return {}
+    result = {}
+    for chunk in raw.split(b'{"id"')[1:]:
+        # Schließende Klammer des JSON-Objekts suchen
+        depth, end = 1, -1
+        for pos, b in enumerate(chunk):
+            if b == 0x7B:    # {
+                depth += 1
+            elif b == 0x7D:  # }
+                depth -= 1
+                if depth == 0:
+                    end = pos
+                    break
+        if end == -1:
+            continue
+        segment = b'{"id"' + chunk[:end + 1]
+        if b'"public_key"' not in segment or b'"name"' not in segment:
+            continue
+        try:
+            obj = _json.loads(segment)
+            pk = obj.get("public_key", "")
+            nm = obj.get("name", "")
+            if pk and nm:
+                result[pk] = nm
+        except Exception:
+            pass
+    return result
+
 
 def wgui_peer_names():
-    """Liest Public-Key → Name Mapping aus wg0.conf.
-    wireguard-ui schreibt den Peer-Namen als Kommentar direkt vor den [Peer]-Block:
-      # PeerName
-      [Peer]
-      PublicKey = <key>
-    Gibt leeres Dict zurück wenn Datei nicht verfügbar."""
-    try:
-        with open(WG_CONF) as f:
-            lines = f.readlines()
-        result = {}
-        pending_name = None
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                # Kommentarzeile → potenzieller Name (letzter vor [Peer] gewinnt)
-                pending_name = stripped.lstrip("#").strip()
-            elif stripped == "[Peer]":
-                # [Peer]-Block beginnt, pending_name merken
-                pass  # Name wird beim PublicKey-Treffer zugeordnet
-            elif stripped.startswith("PublicKey") and "=" in stripped:
-                pub_key = stripped.split("=", 1)[1].strip()
-                if pending_name:
-                    result[pub_key] = pending_name
-                pending_name = None
-            elif stripped == "" or stripped.startswith("["):
-                # Neue Sektion oder Leerzeile → Name-Kontext zurücksetzen
-                if not stripped.startswith("[Peer]"):
-                    pending_name = None
-        return result
-    except Exception:
-        return {}
+    """Peer-Namen: erst wg0.conf, Fallback auf BoltDB-Binärsuche."""
+    names = _names_from_wg_conf(WG_CONF)
+    if names:
+        print(f"[dash] peer-namen aus wg0.conf ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
+        return names
+    names = _names_from_boltdb(WGUI_DB)
+    if names:
+        print(f"[dash] peer-namen aus boltdb ({len(names)}): {list(names.values())}", file=sys.stderr, flush=True)
+        return names
+    print(
+        f"[dash] WARN: keine peer-namen gefunden. "
+        f"wg_conf={WG_CONF} (exists={os.path.exists(WG_CONF)}), "
+        f"db={WGUI_DB} (exists={os.path.exists(WGUI_DB)})",
+        file=sys.stderr, flush=True,
+    )
+    return {}
 
 
 def wg_data():

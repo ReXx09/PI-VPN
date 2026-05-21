@@ -165,12 +165,15 @@ services:
       - /:/hostroot:ro
       # wireguard-ui wg0.conf (read-only): Peer-Namen auslesen
       - ./data/wireguard:/app/wireguard:ro
+      # wireguard-ui BoltDB (read-only): Fallback für Peer-Namen
+      - ./data/db:/app/wgui-db:ro
 
     environment:
       # Gleiche Variable wie in menu.sh — wird für DDNS-Abgleich verwendet
       - VPN_HOST=${VPN_HOST:-}
-      # Pfad zur wg0.conf (aus wireguard-ui Volume gemountet)
+      # Pfade zu wireguard-ui-Daten für Peer-Namen-Lookup
       - WG_CONF_PATH=/app/wireguard/wg0.conf
+      - WGUI_DB_PATH=/app/wgui-db/server.db
       # Nextcloud Backup-Status (optional — aus .env)
       - NC_URL=${NC_URL:-}
       - NC_USER=${NC_USER:-}
