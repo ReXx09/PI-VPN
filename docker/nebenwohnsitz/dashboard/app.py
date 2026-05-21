@@ -83,7 +83,11 @@ def _names_from_wg_conf(path):
             candidate = s.lstrip("#").strip()
             if candidate.lower().startswith("name:"):
                 candidate = candidate[5:].strip()
-            if candidate:
+            # Interne wireguard-ui Metadaten-Kommentare ignorieren
+            _skip = ("update at", "update:", "generated", "do not edit", "last update")
+            if any(candidate.lower().startswith(p) for p in _skip):
+                pass
+            elif candidate:
                 pending = candidate
         elif s == "[Peer]":
             pass                                            # pending behalten
