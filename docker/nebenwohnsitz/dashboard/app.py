@@ -84,7 +84,7 @@ def _names_from_wg_conf(path):
             if candidate.lower().startswith("name:"):
                 candidate = candidate[5:].strip()
             # Interne wireguard-ui Metadaten-Kommentare ignorieren
-            _skip = ("update at", "update:", "generated", "do not edit", "last update")
+            _skip = ("update at", "update:", "created at", "created:", "generated", "do not edit", "last update")
             if any(candidate.lower().startswith(p) for p in _skip):
                 pass
             elif candidate:
