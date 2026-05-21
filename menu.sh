@@ -471,13 +471,14 @@ menu_config_wt() {
         CHOICE=$(whiptail \
             --title "PI-VPN -- Konfiguration & Updates" \
             --menu "\nWas soll bearbeitet werden?" \
-            22 72 7 \
+            22 72 8 \
             "1" "  .env-Datei bearbeiten              (nano)" \
             "2" "  docker-compose.yml anzeigen" \
             "3" "  Updates vom GitHub holen      (git pull)" \
-            "4" "  WireGuard-Konfig anzeigen    (wg0.conf)" \
-            "5" "  Raspberry Pi Systeminformationen" \
-            "6" "  Raspberry Pi System aktualisieren   (apt)" \
+            "4" "  Dashboard deployen  (pull + build + recreate)" \
+            "5" "  WireGuard-Konfig anzeigen    (wg0.conf)" \
+            "6" "  Raspberry Pi Systeminformationen" \
+            "7" "  Raspberry Pi System aktualisieren   (apt)" \
             "0" "  ← Zurück zum Hauptmenü" \
             3>&1 1>&2 2>&3) || return
 
@@ -507,6 +508,29 @@ menu_config_wt() {
                 press_enter
                 ;;
             4)
+                if whiptail --title "Dashboard deployen" \
+                    --yesno "Dashboard aktualisieren und neu deployen?\n\n  [1/3] git pull\n  [2/3] docker compose build dashboard\n  [3/3] docker compose up -d --force-recreate dashboard\n\nDas dauert ~1 Minute." \
+                    13 66; then
+                    clear
+                    echo -e "${BOLD}Dashboard deployen…${NC}\n"
+                    echo -e "${CYAN}[1/3] git pull…${NC}"
+                    git -C "$SCRIPT_DIR" pull 2>&1 \
+                        && echo -e "${GREEN}✔  Aktualisiert${NC}" \
+                        || echo -e "${YELLOW}⚠  git pull übersprungen${NC}"
+                    echo ""
+                    echo -e "${CYAN}[2/3] docker compose build dashboard…${NC}"
+                    docker compose -f "$COMPOSE_FILE" build dashboard \
+                        && echo -e "${GREEN}✔  Build erfolgreich${NC}" \
+                        || { echo -e "${RED}✘  Build fehlgeschlagen${NC}"; press_enter; return; }
+                    echo ""
+                    echo -e "${CYAN}[3/3] Container ersetzen…${NC}"
+                    docker compose -f "$COMPOSE_FILE" up -d --force-recreate dashboard \
+                        && echo -e "\n${GREEN}✔  Dashboard läuft mit dem neuen Image${NC}" \
+                        || echo -e "\n${RED}✘  Fehler beim Starten${NC}"
+                    press_enter
+                fi
+                ;;
+            5)
                 clear
                 local WG_CONF="$DOCKER_DIR/data/wireguard/wg0.conf"
                 echo -e "${BOLD}WireGuard-Konfig (wg0.conf):${NC}\n"
@@ -518,7 +542,7 @@ menu_config_wt() {
                 fi
                 press_enter
                 ;;
-            5)
+            6)
                 clear
                 echo -e "${BOLD}Raspberry Pi Systeminformationen:${NC}\n"
                 echo -e "  ${CYAN}Hostname:${NC}      $(hostname)"
@@ -533,7 +557,7 @@ menu_config_wt() {
                 echo -e "  ${CYAN}Docker:${NC}        $(docker --version 2>/dev/null || echo 'nicht installiert')"
                 press_enter
                 ;;
-            6)
+            7)
                 local UPDATE_CHOICE
                 UPDATE_CHOICE=$(whiptail \
                     --title "Raspberry Pi Systemupdate" \
