@@ -32,19 +32,59 @@
     /* ── Header ── */
     .hdr {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 24px;
+      flex-direction: column;
+      padding: 12px 24px 10px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
       z-index: 100;
+      gap: 0;
     }
+    .hdr-row1  { display: flex; align-items: center; justify-content: space-between; }
     .hdr-left  { display: flex; align-items: center; gap: 10px; }
     .hdr-title { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
     .hdr-host  { color: var(--blue); font-size: 13px; font-family: monospace; }
     .hdr-right { display: flex; align-items: center; gap: 18px; font-size: 12px; color: var(--muted); }
+
+    /* ── Peer Pills Bar ── */
+    .hdr-peers {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-top: 9px;
+      padding-top: 9px;
+      border-top: 1px solid var(--border);
+    }
+    .hdr-peers-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      white-space: nowrap;
+      margin-right: 2px;
+    }
+    .peer-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px 10px 3px 7px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: default;
+      transition: opacity .2s;
+    }
+    .peer-pill.active   { border-color: #1a3d2a; }
+    .peer-pill.inactive { border-color: #4a1a1a; opacity: .6; }
+    .peer-pill .p-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .peer-pill.active   .p-dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .peer-pill.inactive .p-dot { background: var(--red); }
 
     .conn-wrap { display: flex; align-items: center; gap: 6px; }
     .conn-dot  { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
@@ -193,17 +233,23 @@
 
 <!-- ── Header ── -->
 <header class="hdr">
-  <div class="hdr-left">
-    <span style="font-size:22px">🔒</span>
-    <span class="hdr-title">PI-VPN Dashboard</span>
-    <span class="hdr-host" id="hdr-host">—</span>
-  </div>
-  <div class="hdr-right">
-    <div class="conn-wrap">
-      <div class="conn-dot" id="conn-dot"></div>
-      <span id="conn-text">Verbinde…</span>
+  <div class="hdr-row1">
+    <div class="hdr-left">
+      <span style="font-size:22px">🔒</span>
+      <span class="hdr-title">PI-VPN Dashboard</span>
+      <span class="hdr-host" id="hdr-host">—</span>
     </div>
-    <span id="hdr-updated">—</span>
+    <div class="hdr-right">
+      <div class="conn-wrap">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span id="conn-text">Verbinde…</span>
+      </div>
+      <span id="hdr-updated">—</span>
+    </div>
+  </div>
+  <div class="hdr-peers" id="hdr-peers-bar">
+    <span class="hdr-peers-label">VPN Peers</span>
+    <span class="skel" style="font-size:12px">Lade…</span>
   </div>
 </header>
 
@@ -462,6 +508,22 @@
       if (dn.match === true)  { mb.className='match-pill match-ok';   mb.innerHTML='✔ DNS aktuell'; }
       else if (dn.match===false){ mb.className='match-pill match-fail'; mb.innerHTML='✘ DNS veraltet!'; }
       else                    { mb.className='match-pill match-unk';  mb.textContent='? Unbekannt'; }
+
+      // ── Header Peer Pills ──
+      const pb = el('hdr-peers-bar');
+      if (peers.length > 0) {
+        const pillsHtml = peers.map(p => {
+          const active = p.handshake_ago !== null && p.handshake_ago !== undefined && p.handshake_ago < 300;
+          const label  = p.name ? esc(p.name) : esc(p.public_key_short);
+          const title  = p.handshake_ago !== null && p.handshake_ago !== undefined
+            ? `Letzter Handshake: ${p.handshake_ago}s`
+            : 'Kein Handshake';
+          return `<span class="peer-pill ${active ? 'active' : 'inactive'}" title="${title}"><span class="p-dot"></span>${label}</span>`;
+        }).join('');
+        pb.innerHTML = `<span class="hdr-peers-label">VPN Peers</span>${pillsHtml}`;
+      } else {
+        pb.innerHTML = `<span class="hdr-peers-label">VPN Peers</span><span class="c-muted" style="font-size:12px">Keine Peers verbunden</span>`;
+      }
 
       // ── Peers-Tabelle ──
       const pw = el('peers-wrap');
